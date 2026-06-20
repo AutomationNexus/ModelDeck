@@ -1,0 +1,43 @@
+site_name: ModelDeck
+site_url: https://automationnexus.github.io/ModelDeck/
+repo_url: https://github.com/automationnexus/ModelDeck
+repo_name: automationnexus/ModelDeck
+edit_uri: edit/dev/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+  features:
+    - navigation.tabs
+    - content.code.copy
+
+nav:
+  - Home: README.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - HAOS Add-on: getting-started/haos-addon.md
+  - Guides:
+      - Home Assistant: guides/home-assistant.md
+      - Sensors: guides/sensors.md
+      - Provider Credentials: guides/credentials.md
+      - MQTT Topics: guides/mqtt-topics.md
+      - Dashboard: guides/dashboard.md
+  - Admin:
+      - Configuration: admin/configuration.md
+      - Operations: admin/operations.md
+  - Development:
+      - Local Development: development/local-development.md
+      - Repository Structure: development/repository-structure.md
+  - Releases:
+      - Release Checklist: releases/release-checklist.md
+  - Security:
+      - Threat Model: security/threat-model.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true

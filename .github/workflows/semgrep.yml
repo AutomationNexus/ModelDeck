@@ -1,0 +1,38 @@
+name: Semgrep
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    - cron: "0 7 * * 0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: semgrep-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - uses: actions/checkout@v6
+      - run: |
+          semgrep scan \
+            --config=p/security-audit \
+            --config=p/secrets \
+            --json --output=semgrep-report.json \
+            --metrics=off || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: semgrep-report-${{ github.run_id }}
+          path: semgrep-report.json
+          retention-days: 1

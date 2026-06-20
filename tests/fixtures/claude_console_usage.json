@@ -1,0 +1,17 @@
+{
+  "five_hour": {
+    "utilization": 42.5,
+    "resets_at": "2026-06-24T12:00:00+00:00"
+  },
+  "seven_day": {
+    "utilization": 18.0,
+    "resets_at": "2026-07-01T00:00:00+00:00"
+  },
+  "extra_usage": {
+    "is_enabled": true,
+    "used_credits": 500,
+    "monthly_limit": 10000,
+    "currency": "USD"
+  },
+  "plan_name": "Pro"
+}

@@ -1,0 +1,150 @@
+name: CI
+
+# Validates on every push to dev and every PR to main/dev.
+# Pushes to main are handled by release.yml (not this workflow).
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guard-main-source:
+    name: Guard Main Source Branch
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - name: Enforce dev-only PRs to main
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ github.base_ref }}" != "main" ]; then
+            echo "Not a PR to main — guard does not apply. OK."
+            exit 0
+          fi
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "ERROR: PRs to main must come from the 'dev' branch. Got: ${{ github.head_ref }}"
+            exit 1
+          fi
+          echo "OK — source branch is dev."
+
+  guard-main-files:
+    name: Guard Main Files
+    runs-on: [self-hosted, Linux, X64]
+    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' && github.head_ref != 'dev' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Check for disallowed files targeting main
+        run: |
+          if git diff --name-only origin/main...HEAD | grep -iE -f .github/dev-only-paths | grep -q .; then
+            echo "ERROR: PR to main contains paths blocked by .github/dev-only-paths"
+            git diff --name-only origin/main...HEAD | grep -iE -f .github/dev-only-paths
+            exit 1
+          fi
+          echo "OK — no disallowed files found."
+
+  lint:
+    name: Lint
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install ruff
+      - run: ruff check src tests tools
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - run: bash tools/check-operator-env-gates.sh
+
+  hygiene:
+    name: hygiene (secrets + core tree)
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v6
+      - name: secrets must never be tracked
+        run: |
+          bad=$(git ls-files | grep -E '^\.env$|\.pem$|(^|/)id_rsa' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::credential files must never be committed:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "ok — no credential files tracked"
+
+  test-standards:
+    name: Test Standards
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: python tests/check_test_standards.py
+
+  test:
+    name: Python Tests
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: python -m venv .venv && .venv/bin/pip install -e ".[dev,service]" -q
+      - run: >-
+          .venv/bin/python -m pytest
+          -m "not integration"
+          -p no:cacheprovider
+          --cov=src/modeldeck
+          --cov-report=term-missing:skip-covered
+          --cov-fail-under=97
+      - run: .venv/bin/python -m modeldeck config validate --config templates/modeldeck.example.yaml
+
+  integration:
+    name: Integration (Mosquitto)
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Start Mosquitto
+        run: bash tools/ci-start-mosquitto.sh
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: python -m venv .venv && .venv/bin/pip install -e ".[dev,service]" -q
+      - run: .venv/bin/python -m pytest -m integration -v --tb=short
+      - name: Stop Mosquitto
+        if: always()
+        run: docker rm -f "${CI_MOSQUITTO_CONTAINER:-}" 2>/dev/null || true
+
+  security:
+    name: Security Scans
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: pip install bandit pip-audit
+      - run: bandit -r src/modeldeck -f json -o bandit-report.json -ll || true
+      - run: pip-audit --format json --output pip-audit.json || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: security-reports-${{ github.run_id }}
+          path: "*.json"
+          retention-days: 1

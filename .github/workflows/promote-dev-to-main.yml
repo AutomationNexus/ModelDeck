@@ -1,0 +1,69 @@
+name: Promote dev to main
+
+# Long-term release gate: dev CI green → push dev to main → release.yml on main.
+# Run manually (or via scripts/org-promote-release.ps1) after dev CI passes.
+# Does not wait on Nightly/Semgrep — only the CI workflow.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: promote-dev-to-main
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote dev → main
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    steps:
+      - name: Require green dev CI
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const { data: workflows } = await github.rest.actions.listRepoWorkflows({ owner, repo });
+            const ci = workflows.workflows.find((w) => w.path === ".github/workflows/ci.yml");
+            if (!ci) core.setFailed("CI workflow not found");
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: ci.id,
+              branch: "dev",
+              per_page: 1,
+            });
+            const run = data.workflow_runs[0];
+            if (!run || run.conclusion !== "success") {
+              core.setFailed(`Latest dev CI must be success (got ${run?.conclusion ?? "none"})`);
+            }
+            core.info(`Dev CI run ${run.id} succeeded at ${run.updated_at}`);
+
+      - uses: actions/checkout@v6
+        with:
+          ref: dev
+          fetch-depth: 0
+          # Admin PAT so the push below bypasses branch protection on main
+          # (enforce_admins=false). A GITHUB_TOKEN push is rejected by a
+          # protected branch; the PAT also makes this a real push event so
+          # release.yml fires on its own — no explicit dispatch needed.
+          # On push:main, release.yml defaults to linux/amd64,linux/arm64.
+          token: ${{ secrets.REPO_DISPATCH_PAT }}
+
+      - name: Push dev to main
+        run: |
+          git config user.name "Tahasanul Abraham"
+          git config user.email "17075361+t-abraham@users.noreply.github.com"
+          if git fetch origin main 2>/dev/null && git merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
+            git push origin HEAD:refs/heads/main
+          else
+            echo "main missing or unrelated history - setting main to dev HEAD"
+            git push origin HEAD:refs/heads/main --force
+          fi
+        # Fast-forward push preserves the dev commit author (not a bot), so
+        # release.yml's bot-author guard does not skip it. release.yml then
+        # tags v{version} from pyproject.toml, builds and publishes the image,
+        # and (for v0.0.2+) sync-haos-stable pins + releases the HAOS add-on.

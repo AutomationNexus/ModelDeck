@@ -1,0 +1,21 @@
+# End-user compose — pulls the published GHCR image (default :latest).
+# From the repository root:
+#   cp .env.example .env
+#   ./ops/bootstrap-config.sh    # or bootstrap-config.ps1 on Windows
+#   docker compose -f templates/docker-compose.yml up -d
+#
+# For local source builds, use templates/docker-compose.build.yml instead.
+
+services:
+  modeldeck:
+    image: "${IMAGE_URL:-ghcr.io/automationnexus/modeldeck}:${IMAGE_TYPE:-latest}"
+    container_name: modeldeck
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    volumes:
+      - ../config:/config
+      - ../data:/data
+    environment:
+      MODELDECK_CONFIG_DIR: /config
+      MODELDECK_DATA_DIR: /data

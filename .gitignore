@@ -1,0 +1,36 @@
+# Local secrets and environment
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+tmp/
+
+# Runtime data (local compose bind mounts)
+/config/
+/data/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local-only collaborator files
+AGENTS.md
+CLAUDE.md
+.cursor/
+.claude/

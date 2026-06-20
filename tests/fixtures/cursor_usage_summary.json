@@ -1,0 +1,13 @@
+{
+  "planUsage": {
+    "totalPercentUsed": 46.4,
+    "autoPercentUsed": 52.1,
+    "apiPercentUsed": 18.3,
+    "includedSpend": 18560,
+    "totalSpend": 18560,
+    "limit": 40000,
+    "remaining": 21440
+  },
+  "billingCycleEnd": "1771077734000",
+  "planName": "Ultra"
+}

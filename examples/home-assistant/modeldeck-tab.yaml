@@ -1,0 +1,185 @@
+# Columns 1–3: live gauges + entities per provider. Column 4: all graphs.
+# Edit dashboard → Add view → Raw configuration editor → paste below
+# Requires: layout-card (HACS)
+# Optional: card-mod (HACS) for red auth_error on collector rows
+# Entity IDs: sensor.modeldeck_{provider}_{metric} — see docs/guides/sensors.md
+
+title: ModelDeck
+path: modeldeck
+type: custom:horizontal-layout
+layout:
+  width: 300
+  max_cols: 10
+cards:
+  - type: custom:layout-card
+    layout_type: custom:vertical-layout
+    layout:
+      width: 250
+      max_cols: 1
+    cards:
+      - type: gauge
+        entity: sensor.modeldeck_codex_usage_percent
+        name: Usage
+        min: 0
+        max: 100
+        needle: true
+        severity:
+          green: 0
+          yellow: 70
+          red: 90
+      - type: entities
+        title: OpenAI Codex
+        show_header_toggle: false
+        state_color: false
+        entities:
+          - entity: sensor.modeldeck_codex_usage_weekly_percent
+            name: Weekly Usage
+          - entity: sensor.modeldeck_codex_reset_at
+            name: Reset At
+          - entity: sensor.modeldeck_codex_reset_weekly_at
+            name: Weekly Reset At
+          - entity: sensor.modeldeck_codex_plan
+            name: Plan
+      - type: entities
+        title: Codex Collector
+        show_header_toggle: false
+        state_color: false
+        card_mod:
+          style: |
+            ha-card $: |
+              .entity-row:has(state-badge[data-state="auth_error"]) {
+                --primary-text-color: #f44336;
+              }
+        entities:
+          - entity: sensor.modeldeck_codex_status
+            name: Status
+          - entity: sensor.modeldeck_codex_last_success
+            name: Last Success
+  - type: custom:layout-card
+    layout_type: custom:vertical-layout
+    layout:
+      width: 250
+      max_cols: 1
+    cards:
+      - type: gauge
+        entity: sensor.modeldeck_claude_usage_percent
+        name: Usage 5h
+        min: 0
+        max: 100
+        needle: true
+        severity:
+          green: 0
+          yellow: 70
+          red: 90
+      - type: entities
+        title: Claude
+        show_header_toggle: false
+        state_color: false
+        entities:
+          - entity: sensor.modeldeck_claude_usage_weekly_percent
+            name: Weekly Usage
+          - entity: sensor.modeldeck_claude_reset_at
+            name: Reset At
+          - entity: sensor.modeldeck_claude_reset_weekly_at
+            name: Weekly Reset At
+          - entity: sensor.modeldeck_claude_plan
+            name: Plan
+      - type: entities
+        title: Claude Collector
+        show_header_toggle: false
+        state_color: false
+        card_mod:
+          style: |
+            ha-card $: |
+              .entity-row:has(state-badge[data-state="auth_error"]) {
+                --primary-text-color: #f44336;
+              }
+        entities:
+          - entity: sensor.modeldeck_claude_status
+            name: Status
+          - entity: sensor.modeldeck_claude_last_success
+            name: Last Success
+  - type: custom:layout-card
+    layout_type: custom:vertical-layout
+    layout:
+      width: 250
+      max_cols: 1
+    cards:
+      - type: gauge
+        entity: sensor.modeldeck_cursor_usage_percent
+        name: Usage
+        min: 0
+        max: 100
+        needle: true
+        severity:
+          green: 0
+          yellow: 70
+          red: 90
+      - type: entities
+        title: Cursor
+        show_header_toggle: false
+        state_color: false
+        entities:
+          - entity: sensor.modeldeck_cursor_usage_auto_percent
+            name: Auto + Composer
+          - entity: sensor.modeldeck_cursor_usage_api_percent
+            name: API Usage
+          - entity: sensor.modeldeck_cursor_usage_used
+            name: Used
+          - entity: sensor.modeldeck_cursor_usage_limit
+            name: Limit
+          - entity: sensor.modeldeck_cursor_reset_at
+            name: Reset At
+      - type: entities
+        title: Cursor Collector
+        show_header_toggle: false
+        state_color: false
+        card_mod:
+          style: |
+            ha-card $: |
+              .entity-row:has(state-badge[data-state="auth_error"]) {
+                --primary-text-color: #f44336;
+              }
+        entities:
+          - entity: sensor.modeldeck_cursor_status
+            name: Status
+          - entity: sensor.modeldeck_cursor_last_success
+            name: Last Success
+  - type: custom:layout-card
+    layout_type: custom:vertical-layout
+    layout:
+      width: 320
+      max_cols: 1
+    cards:
+      - type: statistics-graph
+        title: 24h Mean — All Providers
+        chart_type: line
+        period: hour
+        days_to_show: 1
+        entities:
+          - entity: sensor.modeldeck_codex_usage_percent
+            name: Codex
+          - entity: sensor.modeldeck_claude_usage_percent
+            name: Claude
+          - entity: sensor.modeldeck_cursor_usage_percent
+            name: Cursor
+      - type: history-graph
+        title: Codex (7 days)
+        hours_to_show: 168
+        entities:
+          - entity: sensor.modeldeck_codex_usage_percent
+          - entity: sensor.modeldeck_codex_usage_weekly_percent
+      - type: history-graph
+        title: Claude (7 days)
+        hours_to_show: 168
+        entities:
+          - entity: sensor.modeldeck_claude_usage_percent
+          - entity: sensor.modeldeck_claude_usage_weekly_percent
+      - type: history-graph
+        title: Cursor (7 days)
+        hours_to_show: 168
+        entities:
+          - entity: sensor.modeldeck_cursor_usage_percent
+          - entity: sensor.modeldeck_cursor_usage_auto_percent
+          - entity: sensor.modeldeck_cursor_usage_api_percent
+subview: false

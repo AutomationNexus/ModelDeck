@@ -1,0 +1,14 @@
+{
+  "billingCycleStart": "1768399334000",
+  "billingCycleEnd": "1771077734000",
+  "planName": "Pro",
+  "planUsage": {
+    "totalSpend": 23222,
+    "includedSpend": 23222,
+    "remaining": 16778,
+    "limit": 40000,
+    "totalPercentUsed": 15.48,
+    "autoPercentUsed": 22.0,
+    "apiPercentUsed": 8.5
+  }
+}

@@ -1,0 +1,28 @@
+# Quickstart — mock provider only (MQTT + Home Assistant smoke test).
+# After verifying entities appear, switch to modeldeck.example.yaml for real providers.
+#
+# MQTT host: use your Home Assistant hostname or Mosquitto add-on IP (not 127.0.0.1 from HA).
+
+mqtt:
+  host: homeassistant.local
+  port: 1883
+  username: ""
+  tls: false
+  client_id: modeldeck
+  topic_prefix: modeldeck
+  discovery_prefix: homeassistant
+
+service:
+  poll_interval_seconds: 300
+  retain_state: true
+  log_level: INFO
+
+providers:
+  mock:
+    enabled: true
+  codex:
+    enabled: false
+  claude:
+    enabled: false
+  cursor:
+    enabled: false

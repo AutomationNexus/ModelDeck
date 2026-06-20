@@ -1,0 +1,19 @@
+# Contributor compose — build from source instead of pulling GHCR.
+# From the repository root:
+#   ./ops/bootstrap-config.sh
+#   docker compose -f templates/docker-compose.build.yml up --build -d
+
+services:
+  modeldeck:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: "${IMAGE_URL:-modeldeck}:${IMAGE_TYPE:-local}"
+    container_name: modeldeck
+    restart: unless-stopped
+    volumes:
+      - ../config:/config
+      - ../data:/data
+    environment:
+      MODELDECK_CONFIG_DIR: /config
+      MODELDECK_DATA_DIR: /data

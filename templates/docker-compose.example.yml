@@ -1,0 +1,18 @@
+# Deprecated alias — use templates/docker-compose.yml (GHCR) or
+# templates/docker-compose.build.yml (local build) instead.
+#
+#   docker compose -f templates/docker-compose.yml up -d
+
+services:
+  modeldeck:
+    image: "${IMAGE_URL:-ghcr.io/automationnexus/modeldeck}:${IMAGE_TYPE:-latest}"
+    container_name: modeldeck
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    volumes:
+      - ../config:/config
+      - ../data:/data
+    environment:
+      MODELDECK_CONFIG_DIR: /config
+      MODELDECK_DATA_DIR: /data

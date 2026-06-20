@@ -1,0 +1,364 @@
+name: Release
+
+# Release entrypoint — dormant until the first dev → main merge.
+#   1. push to main         → auto semver tag, validate, build, publish :latest
+#   2. push to v* tag       → rebuild that tag (no re-validation)
+#   3. workflow_dispatch    → manual rebuild of an existing tag
+#
+# Day-to-day work merges to dev; nightly.yml publishes :nightly from dev.
+# Uses only GITHUB_TOKEN — no PAT required.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Existing git tag to rebuild (e.g. v0.2.0)"
+        required: true
+        type: string
+      multi_arch:
+        description: "Build linux/amd64 + linux/arm64 (set false for amd64-only rebuild)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: automationnexus/modeldeck
+  RELEASE_PLATFORMS: linux/amd64,linux/arm64
+
+concurrency:
+  group: release-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare Release Tag
+    runs-on: [self-hosted, Linux, X64]
+    if: ${{ !(github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.event.head_commit.author.name == 'github-actions[bot]') }}
+    outputs:
+      tag_name: ${{ steps.resolve.outputs.tag_name }}
+      event_kind: ${{ steps.resolve.outputs.event_kind }}
+      is_prerelease: ${{ steps.resolve.outputs.is_prerelease }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve tag based on trigger
+        id: resolve
+        run: |
+          set -e
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag_name }}"
+            KIND="dispatch"
+
+          elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+            KIND="tag_push"
+
+          elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/heads/main ]]; then
+            # Tag from pyproject.toml — not auto-increment from git tags.
+            # Auto-increment raced when merges landed close together (v0.1.10 code tagged v0.1.9).
+            VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+            if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "pyproject.toml project.version must be semver X.Y.Z (got: $VERSION)"
+              exit 1
+            fi
+            TAG="v${VERSION}"
+            KIND="main_push"
+            MSG="${{ github.event.head_commit.message }}"
+
+            if git rev-parse "$TAG" >/dev/null 2>&1; then
+              EXISTING=$(git rev-parse "$TAG^{commit}")
+              CURRENT=$(git rev-parse HEAD)
+              if [ "$EXISTING" = "$CURRENT" ]; then
+                echo "Tag $TAG already on HEAD — reusing for build/release"
+              else
+                echo "Tag $TAG exists on $EXISTING but HEAD is $CURRENT"
+                echo "Bump project.version in pyproject.toml before merging to main."
+                exit 1
+              fi
+            else
+              git tag -a "$TAG" -m "${MSG:0:72}"
+              git push origin "$TAG"
+            fi
+          else
+            echo "Unsupported trigger: ${{ github.event_name }} ${{ github.ref }}"
+            exit 1
+          fi
+
+          if echo "$TAG" | grep -q '-'; then
+            PRE="true"
+          else
+            PRE="false"
+          fi
+
+          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+          echo "event_kind=$KIND" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$PRE" >> "$GITHUB_OUTPUT"
+
+  lint:
+    name: Lint
+    needs: prepare
+    if: needs.prepare.outputs.event_kind == 'main_push'
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: python -m venv .venv && .venv/bin/pip install -e ".[dev,service]" -q
+      - run: .venv/bin/python -m ruff check src tests tools
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - run: bash tools/check-operator-env-gates.sh
+
+  test-standards:
+    name: Test Standards
+    needs: prepare
+    if: needs.prepare.outputs.event_kind == 'main_push'
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: python tests/check_test_standards.py
+
+  test:
+    name: Python Tests
+    needs: prepare
+    if: needs.prepare.outputs.event_kind == 'main_push'
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: python -m venv .venv && .venv/bin/pip install -e ".[dev,service]" -q
+      - run: >-
+          .venv/bin/python -m pytest
+          -m "not integration"
+          -p no:cacheprovider
+          --cov=src/modeldeck
+          --cov-report=term-missing:skip-covered
+          --cov-fail-under=97
+      - run: .venv/bin/python -m modeldeck config validate --config templates/modeldeck.example.yaml
+
+  build-and-push:
+    name: Build & Push Docker Image
+    needs: [prepare, lint, test-standards, test]
+    if: |
+      always() &&
+      needs.prepare.result == 'success' &&
+      (needs.prepare.outputs.event_kind != 'main_push' ||
+       (needs.lint.result == 'success' &&
+        needs.test-standards.result == 'success' &&
+        needs.test.result == 'success'))
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag_name }}
+          fetch-depth: 0
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve platforms
+        id: platforms
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.multi_arch }}" = "false" ]; then
+            echo "value=linux/amd64" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ env.RELEASE_PLATFORMS }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ needs.prepare.outputs.tag_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.prepare.outputs.tag_name }}
+            type=semver,pattern={{major}},value=${{ needs.prepare.outputs.tag_name }}
+            type=raw,value=latest,enable=${{ needs.prepare.outputs.is_prerelease == 'false' }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          platforms: ${{ steps.platforms.outputs.value }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+  container-scan:
+    name: Container Scan (Trivy)
+    needs: [prepare, build-and-push]
+    runs-on: [self-hosted, Linux, X64]
+    continue-on-error: true
+    steps:
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.prepare.outputs.tag_name }}
+          format: json
+          output: trivy-report.json
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [prepare, build-and-push]
+    if: always() && needs.build-and-push.result == 'success'
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag_name }}
+
+      - name: Build release body
+        run: |
+          TAG="${{ needs.prepare.outputs.tag_name }}"
+          if [ "${{ needs.prepare.outputs.is_prerelease }}" = "false" ]; then
+            DOCKER_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          else
+            DOCKER_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG"
+          fi
+          {
+            echo "## Docker"
+            echo '```'
+            echo "docker pull $DOCKER_REF"
+            echo '```'
+          } > release-body.md
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
+          name: Release ${{ needs.prepare.outputs.tag_name }}
+          prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
+          generate_release_notes: true
+          body_path: release-body.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sync-haos-stable:
+    name: Sync HAOS stable add-on pin
+    needs: [prepare, publish-release]
+    if: |
+      always() &&
+      needs.prepare.result == 'success' &&
+      needs.publish-release.result == 'success' &&
+      (needs.prepare.outputs.event_kind == 'main_push' || github.event_name == 'workflow_dispatch') &&
+      needs.prepare.outputs.tag_name != 'v0.0.1'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Clone ModelDeck-HAOS dev
+        env:
+          GH_TOKEN: ${{ secrets.REPO_DISPATCH_PAT }}
+        run: |
+          git clone --branch dev --depth 1 \
+            "https://x-access-token:${GH_TOKEN}@github.com/automationnexus/ModelDeck-HAOS.git" \
+            haos-checkout
+
+      - name: Check if sync is needed
+        id: sync_check
+        run: |
+          pip install pyyaml -q
+          TAG="${{ needs.prepare.outputs.tag_name }}"
+          if python tools/sync_haos_addon.py haos-checkout "$TAG" --check-only; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "HAOS already pinned to $TAG — skipping PR"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Apply stable pin
+        if: steps.sync_check.outputs.needed == 'true'
+        run: |
+          pip install pyyaml -q
+          TAG="${{ needs.prepare.outputs.tag_name }}"
+          python tools/sync_haos_addon.py haos-checkout "$TAG"
+          cd haos-checkout && ADDON_CHANNEL=stable python tools/validate_ha_addon.py
+
+      - name: Open PR on ModelDeck-HAOS dev
+        id: cpr
+        if: steps.sync_check.outputs.needed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.REPO_DISPATCH_PAT }}
+          path: haos-checkout
+          commit-message: "chore(haos): sync add-on to ModelDeck ${{ needs.prepare.outputs.tag_name }}"
+          title: "chore(haos): sync add-on to ModelDeck ${{ needs.prepare.outputs.tag_name }}"
+          body: |
+            Automated sync after ModelDeck release `${{ needs.prepare.outputs.tag_name }}`.
+
+            - Updates `modeldeck/config.yaml` version
+            - Updates `modeldeck/Dockerfile` BUILD_FROM pin
+
+            After merge: wait for HAOS CI green, then Promote dev to main and Release.
+          branch: sync/modeldeck-${{ needs.prepare.outputs.tag_name }}
+          base: dev
+          delete-branch: true
+
+      # Fully automatic: the pin was already validated above, so merge the sync PR,
+      # wait for HAOS dev CI on the merged commit, then dispatch HAOS promote → release.
+      - name: Auto-merge HAOS sync PR, then promote + release
+        if: steps.sync_check.outputs.needed == 'true' && steps.cpr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ secrets.REPO_DISPATCH_PAT }}
+        run: |
+          set -euo pipefail
+          PR="${{ steps.cpr.outputs.pull-request-number }}"
+          R="automationnexus/ModelDeck-HAOS"
+          echo "Merging HAOS sync PR #${PR} (pin pre-validated)…"
+          gh pr merge "${PR}" --repo "${R}" --merge --delete-branch
+          DEV_SHA="$(gh api "repos/${R}/branches/dev" --jq '.commit.sha')"
+          echo "Waiting for HAOS dev CI on ${DEV_SHA}…"
+          sleep 15
+          for _ in $(seq 1 40); do
+            run="$(gh run list --repo "${R}" --workflow ci.yml --branch dev --limit 8 \
+                    --json headSha,status,conclusion \
+                    --jq "[.[] | select(.headSha==\"${DEV_SHA}\")][0]")"
+            st="$(printf '%s' "${run}" | jq -r '.status // "none"')"
+            cc="$(printf '%s' "${run}" | jq -r '.conclusion // "none"')"
+            echo "  HAOS dev CI: status=${st} conclusion=${cc}"
+            if [ "${st}" = "completed" ]; then
+              [ "${cc}" = "success" ] && break
+              echo "::error::HAOS dev CI not green (${cc})"; exit 1
+            fi
+            sleep 15
+          done
+          echo "Promoting HAOS dev → main → release…"
+          gh workflow run promote-dev-to-main.yml --repo "${R}" --ref dev
+          echo "HAOS promote dispatched — it will push main and release the matching version."

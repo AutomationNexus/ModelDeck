@@ -1,0 +1,29 @@
+# Production template — real providers enabled; fill secrets.yaml before start.
+# MQTT host: homeassistant.local or your Mosquitto broker IP on the LAN.
+
+mqtt:
+  host: homeassistant.local
+  port: 1883
+  username: ""
+  tls: false
+  client_id: modeldeck
+  topic_prefix: modeldeck
+  discovery_prefix: homeassistant
+
+service:
+  poll_interval_seconds: 300
+  retain_state: true
+  log_level: INFO
+
+providers:
+  mock:
+    enabled: false
+  codex:
+    enabled: true
+    auth_mode: subscription
+  claude:
+    enabled: true
+    auth_mode: cookie
+  cursor:
+    enabled: true
+    auth_mode: personal
