@@ -39,7 +39,7 @@ concurrency:
 jobs:
   prepare:
     name: Prepare Release Tag
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     if: ${{ !(github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.event.head_commit.author.name == 'github-actions[bot]') }}
     outputs:
       tag_name: ${{ steps.resolve.outputs.tag_name }}
@@ -113,7 +113,7 @@ jobs:
     name: Lint
     needs: prepare
     if: needs.prepare.outputs.event_kind == 'main_push'
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -121,14 +121,14 @@ jobs:
           python-version: "3.11"
       - run: python -m venv .venv && .venv/bin/pip install -e ".[dev,service]" -q
       - run: .venv/bin/python -m ruff check src tests tools
-      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      # ripgrep is pre-installed on ubuntu-latest.
       - run: bash tools/check-operator-env-gates.sh
 
   test-standards:
     name: Test Standards
     needs: prepare
     if: needs.prepare.outputs.event_kind == 'main_push'
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -140,7 +140,7 @@ jobs:
     name: Python Tests
     needs: prepare
     if: needs.prepare.outputs.event_kind == 'main_push'
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -166,7 +166,7 @@ jobs:
        (needs.lint.result == 'success' &&
         needs.test-standards.result == 'success' &&
         needs.test.result == 'success'))
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
@@ -214,7 +214,7 @@ jobs:
   container-scan:
     name: Container Scan (Trivy)
     needs: [prepare, build-and-push]
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     continue-on-error: true
     steps:
       - uses: docker/login-action@v4
@@ -234,7 +234,7 @@ jobs:
     name: Publish GitHub Release
     needs: [prepare, build-and-push]
     if: always() && needs.build-and-push.result == 'success'
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
@@ -274,7 +274,7 @@ jobs:
       needs.publish-release.result == 'success' &&
       (needs.prepare.outputs.event_kind == 'main_push' || github.event_name == 'workflow_dispatch') &&
       needs.prepare.outputs.tag_name != 'v0.0.1'
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
