@@ -1,7 +1,11 @@
+(^|/)AGENT-HANDOFF\.md$
 (^|/)CLAUDE\.md$
 (^|/)AGENTS\.md$
 (^|/)\.mcp\.json$
 (^|/)\.claude/
+(^|/)\.cursor/
 (^|/)\.cursorrules$
-(^|/)\.(cursor|windsurf|copilot|continuedev|codeium)/
+(^|/)\.(windsurf|copilot|continuedev|codeium)/
 (^|/)\.aider
+(^|/)opencode\.json$
+(^|/)\.opencode/

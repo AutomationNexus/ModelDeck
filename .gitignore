@@ -29,8 +29,18 @@ tmp/
 .DS_Store
 Thumbs.db
 
-# Local-only collaborator files
+# Local operator and AI tool state
+AGENT-HANDOFF.md
 AGENTS.md
 CLAUDE.md
 .cursor/
 .claude/
+.mcp.json
+.cursorrules
+.aider*
+.windsurf/
+.copilot/
+.continuedev/
+.codeium/
+opencode.json
+.opencode/
