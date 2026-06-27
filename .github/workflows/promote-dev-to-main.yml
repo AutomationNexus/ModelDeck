@@ -1,6 +1,6 @@
 name: Promote dev to main
 
-# Long-term release gate: dev CI green → push dev to main → release.yml on main.
+# Long-term release gate: dev CI green → merge dev to main by PR → release.yml on main.
 # Run manually (or via scripts/org-promote-release.ps1) after dev CI passes.
 # Does not wait on Nightly/Semgrep — only the CI workflow.
 
@@ -10,6 +10,7 @@ on:
 permissions:
   actions: write
   contents: write
+  pull-requests: write
 
 concurrency:
   group: promote-dev-to-main
@@ -19,7 +20,7 @@ jobs:
   promote:
     name: Promote dev → main
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - name: Require green dev CI
         uses: actions/github-script@v8
@@ -42,28 +43,42 @@ jobs:
             }
             core.info(`Dev CI run ${run.id} succeeded at ${run.updated_at}`);
 
-      - uses: actions/checkout@v6
-        with:
-          ref: dev
-          fetch-depth: 0
-          # Admin PAT so the push below bypasses branch protection on main
-          # (enforce_admins=false). A GITHUB_TOKEN push is rejected by a
-          # protected branch; the PAT also makes this a real push event so
-          # release.yml fires on its own — no explicit dispatch needed.
-          # On push:main, release.yml defaults to linux/amd64,linux/arm64.
-          token: ${{ secrets.REPO_DISPATCH_PAT }}
-
-      - name: Push dev to main
+      - name: Merge dev to main by PR
+        env:
+          GH_TOKEN: ${{ secrets.REPO_DISPATCH_PAT }}
+          REPO: ${{ github.repository }}
         run: |
-          git config user.name "Tahasanul Abraham"
-          git config user.email "17075361+t-abraham@users.noreply.github.com"
-          if git fetch origin main 2>/dev/null && git merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
-            git push origin HEAD:refs/heads/main
-          else
-            echo "main missing or unrelated history - setting main to dev HEAD"
-            git push origin HEAD:refs/heads/main --force
+          set -euo pipefail
+
+          ahead="$(gh api "repos/${REPO}/compare/main...dev" --jq '.ahead_by')"
+          behind="$(gh api "repos/${REPO}/compare/main...dev" --jq '.behind_by')"
+          echo "dev is ${ahead} commit(s) ahead of main and ${behind} behind."
+          if [ "${ahead}" = "0" ]; then
+            echo "No dev commits to promote."
+            exit 0
           fi
-        # Fast-forward push preserves the dev commit author (not a bot), so
-        # release.yml's bot-author guard does not skip it. release.yml then
-        # tags v{version} from pyproject.toml, builds and publishes the image,
-        # and (for v0.0.2+) sync-haos-stable pins + releases the HAOS add-on.
+
+          pr="$(gh pr list --repo "${REPO}" --base main --head dev --state open --json number --jq '.[0].number // empty')"
+          if [ -z "${pr}" ]; then
+            gh pr create \
+              --repo "${REPO}" \
+              --base main \
+              --head dev \
+              --title "release: promote dev to main" \
+              --body "Automated promotion after dev CI passed. Merging this PR triggers release.yml on main."
+            pr="$(gh pr list --repo "${REPO}" --base main --head dev --state open --json number --jq '.[0].number // empty')"
+          fi
+
+          if [ -z "${pr}" ]; then
+            echo "::error::Promotion PR was not created or found."
+            exit 1
+          fi
+
+          echo "Waiting for checks on promotion PR #${pr}..."
+          sleep 15
+          gh pr checks "${pr}" --repo "${REPO}" --watch --fail-fast
+
+          echo "Merging promotion PR #${pr}..."
+          gh pr merge "${pr}" --repo "${REPO}" --merge
+        # The PR merge creates the push to main that release.yml consumes. This
+        # keeps protected-branch policy intact and avoids force-pushing main.
