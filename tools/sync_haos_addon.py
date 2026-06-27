@@ -25,6 +25,11 @@ def parse_version(tag: str) -> str:
     return tag
 
 
+def packaging_version(version: str) -> str:
+    """Return HAOS stable add-on version X.Y.Z.0 for parent release X.Y.Z."""
+    return f"{version}.0"
+
+
 def read_haos_state(haos_root: Path) -> tuple[str, str]:
     """Return (config version, BUILD_FROM image) from HAOS add-on tree."""
     config_path = haos_root / HAOS_CONFIG_REL

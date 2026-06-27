@@ -200,9 +200,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.REPO_DISPATCH_PAT }}
         run: |
+          PARENT_VERSION=$(python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+          print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])
+          PY
+          )
           gh api \
             --method POST \
             repos/automationnexus/ModelDeck-HAOS/dispatches \
             -f event_type=modeldeck-nightly-published \
             -f "client_payload[sha]=${{ needs.detect-changes.outputs.target_sha }}" \
+            -f "client_payload[version]=${PARENT_VERSION}" \
             -f "client_payload[version]=${{ steps.parent.outputs.version }}"
