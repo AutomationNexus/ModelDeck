@@ -47,17 +47,6 @@ jobs:
             }
 
             const { owner, repo } = context.repo;
-            const message = (context.payload.head_commit?.message || "").trim();
-            const mergeMatch = message.match(/^Merge pull request #(\d+) from .+\/dev/m);
-            if (mergeMatch) {
-              const pull_number = Number(mergeMatch[1]);
-              const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
-              if (pr.merged_at && pr.base?.ref === "main" && pr.head?.ref === "dev") {
-                core.info(`Allowed dev to main PR merge (#${pull_number}).`);
-                return;
-              }
-            }
-
             const commitShas = new Set(
               (context.payload.commits || []).map((commit) => commit.id)
             );
@@ -96,10 +85,21 @@ jobs:
             }
 
             const { owner, repo } = context.repo;
-            const commitShas = (context.payload.commits || []).map((commit) => commit.id);
-            if (commitShas.length === 0) {
-              commitShas.push(context.sha);
+            const message = (context.payload.head_commit?.message || "").trim();
+            const mergeMatch = message.match(/^Merge pull request #(\d+) from .+\/dev/m);
+            if (mergeMatch) {
+              const pull_number = Number(mergeMatch[1]);
+              const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
+              if (pr.merged_at && pr.base?.ref === "main" && pr.head?.ref === "dev") {
+                core.info(`Allowed dev to main PR merge (#${pull_number}).`);
+                return;
+              }
             }
+
+            const commitShas = new Set(
+              (context.payload.commits || []).map((commit) => commit.id)
+            );
+            commitShas.add(context.sha);
 
             for (const commitSha of commitShas) {
               const { data: pullRequests } =
