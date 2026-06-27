@@ -2,6 +2,13 @@
 
 All notable changes are documented here.
 
+## [0.0.4] - 2026-06-27
+
+### Changed
+
+- Route dev-to-main promotion through a PR-gated workflow instead of direct pushes.
+- Keep the main push guard aligned with merged dev-to-main promotion PRs.
+
 ## [0.0.3] - 2026-06-27
 
 ### Changed
