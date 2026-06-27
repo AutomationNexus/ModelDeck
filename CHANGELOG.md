@@ -2,6 +2,14 @@
 
 All notable changes are documented here.
 
+## [0.0.3] - 2026-06-27
+
+### Changed
+
+- Sync Home Assistant OS add-on automation with dual stable/nightly channels.
+- Pin Trivy workflow action versions for repeatable CI.
+- Add branch-policy and OpenCode setup parity for Windows local development.
+
 ## [0.0.1] - 2026-06-19
 
 ### Changed
