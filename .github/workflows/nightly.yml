@@ -172,7 +172,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: aquasecurity/trivy-action@master
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly
           format: json
@@ -181,11 +181,21 @@ jobs:
           exit-code: "0"
 
   sync-haos-nightly:
-    name: Sync HAOS nightly branch
+    name: Sync HAOS nightly add-on
     needs: [detect-changes, build-and-push]
     if: needs.detect-changes.outputs.has_changes == 'true' && needs.build-and-push.result == 'success'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.detect-changes.outputs.target_sha }}
+
+      - name: Resolve parent version for HAOS dispatch
+        id: parent
+        run: |
+          VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Dispatch ModelDeck-HAOS nightly sync
         env:
           GH_TOKEN: ${{ secrets.REPO_DISPATCH_PAT }}
@@ -194,4 +204,5 @@ jobs:
             --method POST \
             repos/automationnexus/ModelDeck-HAOS/dispatches \
             -f event_type=modeldeck-nightly-published \
-            -f "client_payload[sha]=${{ needs.detect-changes.outputs.target_sha }}"
+            -f "client_payload[sha]=${{ needs.detect-changes.outputs.target_sha }}" \
+            -f "client_payload[version]=${{ steps.parent.outputs.version }}"
