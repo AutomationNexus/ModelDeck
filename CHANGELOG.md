@@ -2,6 +2,12 @@
 
 All notable changes are documented here.
 
+## [0.0.6] - 2026-06-27
+
+### Changed
+
+- Routine release to validate the full PR-gated promote workflow end-to-end.
+
 ## [0.0.5] - 2026-06-27
 
 ### Fixed
