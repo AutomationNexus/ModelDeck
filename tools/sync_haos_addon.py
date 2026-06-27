@@ -43,14 +43,23 @@ def apply_stable_pin(haos_root: Path, version: str) -> bool:
     config_path = haos_root / HAOS_CONFIG_REL
     docker_path = haos_root / HAOS_DOCKERFILE_REL
     expected_image = f"{IMAGE_PREFIX}{version}"
+    haos_version = f"{version}.0"
 
     current_version, current_build = read_haos_state(haos_root)
-    if current_version == version and current_build == expected_image:
+    if current_version == haos_version and current_build == expected_image:
         return False
 
     addon = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    addon["version"] = version
-    config_path.write_text(yaml.safe_dump(addon, sort_keys=False), encoding="utf-8")
+    addon["version"] = haos_version
+    text = yaml.safe_dump(addon, sort_keys=False)
+    text = re.sub(
+        r"^version: .*$",
+        f'version: "{haos_version}"',
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    config_path.write_text(text, encoding="utf-8")
 
     docker_text = docker_path.read_text(encoding="utf-8")
     new_docker = BUILD_FROM_LINE.sub(
@@ -79,7 +88,8 @@ def main() -> int:
     if args.check_only:
         current_version, current_build = read_haos_state(haos_root)
         expected = f"{IMAGE_PREFIX}{version}"
-        if current_version == version and current_build == expected:
+        expected_haos_version = f"{version}.0"
+        if current_version == expected_haos_version and current_build == expected:
             print("already synced")
             return 0
         print(f"needs sync: version={current_version} build_from={current_build}")
