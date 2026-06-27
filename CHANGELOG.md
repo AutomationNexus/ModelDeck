@@ -2,6 +2,12 @@
 
 All notable changes are documented here.
 
+## [0.0.5] - 2026-06-27
+
+### Fixed
+
+- Recognize merged `dev` to `main` promotion PR commits in the main push guard.
+
 ## [0.0.4] - 2026-06-27
 
 ### Changed
