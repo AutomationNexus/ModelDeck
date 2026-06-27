@@ -74,13 +74,41 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Require workflow promotion for main pushes
-        run: |
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.actor }}" != "github-actions[bot]" ]; then
-            echo "::error::Direct human pushes to main are not allowed. Promote dev to main with the workflow."
-            exit 1
-          fi
-          echo "OK; this is not a direct human push to main."
+      - name: Require PR merge for main pushes
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const allowedBots = new Set(["github-actions[bot]"]);
+            if (allowedBots.has(context.actor)) {
+              core.info("Allowed bot push to main.");
+              return;
+            }
+
+            const { owner, repo } = context.repo;
+            const commitShas = (context.payload.commits || []).map((commit) => commit.id);
+            if (commitShas.length === 0) {
+              commitShas.push(context.sha);
+            }
+
+            for (const commitSha of commitShas) {
+              const { data: pullRequests } =
+                await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                  owner,
+                  repo,
+                  commit_sha: commitSha,
+                });
+              const promotionPrs = pullRequests.filter((pr) =>
+                pr.merged_at && pr.base?.ref === "main" && pr.head?.ref === "dev"
+              );
+              if (promotionPrs.length > 0) {
+                core.info(`Allowed dev to main PR merge (${promotionPrs.map((pr) => "#" + pr.number).join(", ")}).`);
+                return;
+              }
+            }
+
+            core.setFailed(
+              "Direct pushes to main are not allowed. Promote dev to main with the workflow."
+            );
 
   guard-dev-source:
     name: Guard Dev Source Branch
