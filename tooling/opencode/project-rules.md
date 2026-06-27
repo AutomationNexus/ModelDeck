@@ -11,6 +11,18 @@ This repo is the ModelDeck Python service: a Dockerized AI usage and quota bridg
 - Enable local hook once per clone: `tools\install-githooks.cmd` (blocks direct pushes to `dev`/`main`).
 - See `docs/runbooks/branch-policy.md` for the exact workflow.
 
+## Shell (Windows local dev)
+
+Agents run terminal commands in PowerShell (`powershell`; use `pwsh` in `opencode.json` when PowerShell 7+ is installed).
+
+- Chain commands with `;`, not `&&` or `||`.
+- Use Windows paths (`\` or quoted full paths). Do not mix cmd, bash, and PowerShell syntax in one pipeline.
+- Outside the clone or when `gh` cannot infer the repo: `gh --repo automationnexus/ModelDeck <subcommand>`.
+- For failed CI logs: `gh run view <id> --log-failed` (or `--repo automationnexus/ModelDeck`); use `Select-Object -Last N` instead of `tail`.
+- When debugging, run one command per tool call.
+
+CI and `.github/workflows` stay bash on `ubuntu-latest`; do not change workflow shells for local Windows agent rules.
+
 ## Safety Rules
 
 - Start every task with `git status --short --branch` before edits.
