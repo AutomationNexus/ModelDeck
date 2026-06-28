@@ -12,4 +12,6 @@ permissions:
 jobs:
   auto-merge:
     uses: automationnexus/.github/.github/workflows/auto-merge.yml@v1
-    secrets: inherit
+    secrets:
+      ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
+      ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}

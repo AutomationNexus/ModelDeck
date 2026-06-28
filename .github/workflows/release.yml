@@ -26,11 +26,11 @@ concurrency:
 jobs:
   docker-release:
     uses: automationnexus/.github/.github/workflows/release-docker.yml@v1
-    secrets: inherit
     with:
       runner-labels: '["ubuntu-latest"]'
       image-name: automationnexus/modeldeck
       platforms: linux/amd64,linux/arm64
+      tag_name: ${{ inputs.tag_name || '' }}
       has-validation: false   # validation done by CI on dev/main pushes
       python-version: "3.11"
 
@@ -41,13 +41,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Mint CI-Bot token for HAOS sync
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.CI_BOT_APP_ID }}
+          private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: |
+            ModelDeck
+            ModelDeck-HAOS
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Clone ModelDeck-HAOS dev
         env:
-          GH_TOKEN: ${{ secrets.REPO_DISPATCH_PAT }}
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
         run: |
           git clone --branch dev --depth 1 \
             "https://x-access-token:${GH_TOKEN}@github.com/automationnexus/ModelDeck-HAOS.git" \
@@ -74,7 +84,7 @@ jobs:
         if: steps.sync_check.outputs.needed == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.REPO_DISPATCH_PAT }}
+          token: ${{ steps.bot-token.outputs.token }}
           path: haos-checkout
           commit-message: "chore(haos): sync add-on to ModelDeck ${{ needs.docker-release.outputs.tag_name }}"
           title: "chore(haos): sync add-on to ModelDeck ${{ needs.docker-release.outputs.tag_name }}"
@@ -86,7 +96,7 @@ jobs:
       - name: Auto-merge HAOS sync PR
         if: steps.sync_check.outputs.needed == 'true' && steps.cpr.outputs.pull-request-number != ''
         env:
-          GH_TOKEN: ${{ secrets.REPO_DISPATCH_PAT }}
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
         run: |
           PR="${{ steps.cpr.outputs.pull-request-number }}"
           gh pr merge "${PR}" --repo "automationnexus/ModelDeck-HAOS" --merge --delete-branch

@@ -24,9 +24,9 @@ concurrency:
 jobs:
   nightly:
     uses: automationnexus/.github/.github/workflows/nightly.yml@v1
-    secrets: inherit
     with:
       runner-labels: '["ubuntu-latest"]'
       image-name: automationnexus/modeldeck
       platforms: linux/amd64,linux/arm64
+      force_run: ${{ inputs.force_run || false }}
       coverage-threshold: 97
