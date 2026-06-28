@@ -10,24 +10,8 @@ permissions:
   pull-requests: write
 
 jobs:
-  enable:
-    runs-on: ubuntu-latest
-    if: >
-      !github.event.pull_request.draft && (
-        (github.event.pull_request.base.ref == 'dev' &&
-         github.event.pull_request.head.ref != 'dev' &&
-         github.event.pull_request.head.ref != 'main') ||
-        (github.event.pull_request.base.ref == 'main' &&
-         github.event.pull_request.head.ref == 'dev')
-      )
-    steps:
-      - env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-        run: |
-          if [ "${{ github.event.pull_request.base.ref }}" = "main" ]; then
-            gh pr merge "$PR" --repo "$REPO" --auto --merge
-          else
-            gh pr merge "$PR" --repo "$REPO" --auto --squash
-          fi
+  auto-merge:
+    uses: automationnexus/.github/.github/workflows/auto-merge.yml@v1
+    secrets:
+      ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
+      ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
