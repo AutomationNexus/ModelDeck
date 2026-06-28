@@ -1,9 +1,5 @@
 name: Promote dev to main
 
-# Long-term release gate: dev CI green → merge dev to main by PR → release.yml on main.
-# Run manually (or via scripts/org-promote-release.ps1) after dev CI passes.
-# Does not wait on Nightly/Semgrep — only the CI workflow.
-
 on:
   workflow_dispatch:
 
@@ -18,64 +14,7 @@ concurrency:
 
 jobs:
   promote:
-    name: Promote dev → main
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Require green dev CI
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const { data: workflows } = await github.rest.actions.listRepoWorkflows({ owner, repo });
-            const ci = workflows.workflows.find((w) => w.path === ".github/workflows/ci.yml");
-            if (!ci) core.setFailed("CI workflow not found");
-            const { data } = await github.rest.actions.listWorkflowRuns({
-              owner,
-              repo,
-              workflow_id: ci.id,
-              branch: "dev",
-              per_page: 1,
-            });
-            const run = data.workflow_runs[0];
-            if (!run || run.conclusion !== "success") {
-              core.setFailed(`Latest dev CI must be success (got ${run?.conclusion ?? "none"})`);
-            }
-            core.info(`Dev CI run ${run.id} succeeded at ${run.updated_at}`);
-
-      - name: Merge dev to main by PR
-        env:
-          GH_TOKEN: ${{ secrets.REPO_DISPATCH_PAT }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          ahead="$(gh api "repos/${REPO}/compare/main...dev" --jq '.ahead_by')"
-          behind="$(gh api "repos/${REPO}/compare/main...dev" --jq '.behind_by')"
-          echo "dev is ${ahead} commit(s) ahead of main and ${behind} behind."
-          if [ "${ahead}" = "0" ]; then
-            echo "No dev commits to promote."
-            exit 0
-          fi
-
-          pr="$(gh pr list --repo "${REPO}" --base main --head dev --state open --json number --jq '.[0].number // empty')"
-          if [ -z "${pr}" ]; then
-            gh pr create \
-              --repo "${REPO}" \
-              --base main \
-              --head dev \
-              --title "release: promote dev to main" \
-              --body "Automated promotion after dev CI passed. Merging this PR triggers release.yml on main."
-            pr="$(gh pr list --repo "${REPO}" --base main --head dev --state open --json number --jq '.[0].number // empty')"
-          fi
-
-          if [ -z "${pr}" ]; then
-            echo "::error::Promotion PR was not created or found."
-            exit 1
-          fi
-
-          echo "Enabling auto-merge on promotion PR #${pr}..."
-          gh pr merge "${pr}" --repo "${REPO}" --auto --merge
-        # Auto-merge waits for CI to pass on the PR (CI workflow on main branch),
-        # then merges with a merge commit. The push to main triggers release.yml.
-        # This keeps protected-branch policy intact and avoids force-pushing main.
+    uses: automationnexus/.github/.github/workflows/promote-dev-to-main.yml@v1
+    secrets: inherit
+    with:
+      runner-labels: '["ubuntu-latest"]'
