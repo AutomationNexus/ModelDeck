@@ -3,7 +3,7 @@ name: Auto-merge
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
-    branches: [dev]
+    branches: [dev, main]
 
 permissions:
   contents: write
@@ -13,12 +13,21 @@ jobs:
   enable:
     runs-on: ubuntu-latest
     if: >
-      !github.event.pull_request.draft &&
-      github.event.pull_request.head.ref != 'dev' &&
-      github.event.pull_request.head.ref != 'main'
+      !github.event.pull_request.draft && (
+        (github.event.pull_request.base.ref == 'dev' &&
+         github.event.pull_request.head.ref != 'dev' &&
+         github.event.pull_request.head.ref != 'main') ||
+        (github.event.pull_request.base.ref == 'main' &&
+         github.event.pull_request.head.ref == 'dev')
+      )
     steps:
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-        run: gh pr merge "$PR" --repo "$REPO" --auto --squash
+        run: |
+          if [ "${{ github.event.pull_request.base.ref }}" = "main" ]; then
+            gh pr merge "$PR" --repo "$REPO" --auto --merge
+          else
+            gh pr merge "$PR" --repo "$REPO" --auto --squash
+          fi

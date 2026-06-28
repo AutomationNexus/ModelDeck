@@ -74,11 +74,8 @@ jobs:
             exit 1
           fi
 
-          echo "Waiting for checks on promotion PR #${pr}..."
-          sleep 15
-          gh pr checks "${pr}" --repo "${REPO}" --watch --fail-fast
-
-          echo "Merging promotion PR #${pr}..."
-          gh pr merge "${pr}" --repo "${REPO}" --merge
-        # The PR merge creates the push to main that release.yml consumes. This
-        # keeps protected-branch policy intact and avoids force-pushing main.
+          echo "Enabling auto-merge on promotion PR #${pr}..."
+          gh pr merge "${pr}" --repo "${REPO}" --auto --merge
+        # Auto-merge waits for CI to pass on the PR (CI workflow on main branch),
+        # then merges with a merge commit. The push to main triggers release.yml.
+        # This keeps protected-branch policy intact and avoids force-pushing main.
