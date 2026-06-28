@@ -72,3 +72,45 @@ async def test_claude_oauth_collector_with_mock_transport():
     snap = await collector.collect()
     assert snap.status == CollectorStatus.OK
     assert snap.usage_percent == 35.0
+
+
+@pytest.mark.asyncio
+async def test_claude_cookie_sends_browser_headers():
+    """Cookie collector should send browser-like headers to dodge 403s."""
+    payload = json.loads(
+        (FIXTURES / "claude_console_usage.json").read_text(encoding="utf-8")
+    )
+    seen: dict[str, str] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(request.headers)
+        return httpx.Response(200, json=payload)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    toggle = no_file_toggle(enabled=True, auth_mode="cookie")
+    secrets = ProviderSecrets(session_token="session-abc", org_id="org-123")
+    collector = ClaudeCollector(AppConfig(), secrets, toggle, client=client)
+    snap = await collector.collect()
+    assert snap.status == CollectorStatus.OK
+    assert seen.get("origin") == "https://claude.ai"
+    assert seen.get("referer") == "https://claude.ai/"
+    assert seen.get("accept") == "application/json"
+    assert "Mozilla/5.0" in seen.get("user-agent", "")
+
+
+@pytest.mark.asyncio
+async def test_claude_cookie_403_sets_hint():
+    """A 403 should map to auth_error and include an actionable hint."""
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    toggle = no_file_toggle(enabled=True, auth_mode="cookie")
+    secrets = ProviderSecrets(session_token="session-abc", org_id="org-123")
+    collector = ClaudeCollector(AppConfig(), secrets, toggle, client=client)
+    snap = await collector.collect()
+    assert snap.status == CollectorStatus.AUTH_ERROR
+    assert snap.raw_safe is not None
+    assert snap.raw_safe.get("http_status") == 403
+    assert snap.raw_safe.get("auth_mode") == "cookie"
+    assert snap.raw_safe.get("hint") == "cf_clearance_expired_or_docker_ip"

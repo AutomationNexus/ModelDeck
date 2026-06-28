@@ -75,7 +75,7 @@ modeldeck credentials print --provider codex --full
 | `cookie` | claude.ai Pro/Max | `session_token` (sessionKey), `org_id` (lastActiveOrg) | Browser DevTools → Cookies → `https://claude.ai` while signed in |
 | `oauth` | Claude Code | `access_token`, `refresh_token`; optional `subscription_tier` (HA add-on) | `~/.claude/.credentials.json` → `claudeAiOauth` after Claude Code login |
 
-For cookie mode HTTP 403, also copy `cf_clearance` from the same cookie jar.
+For cookie mode HTTP 403, copy all four claude.ai cookies (`sessionKey`, `lastActiveOrg`, `cf_clearance`, `anthropic-device-id`). In Docker, `cf_clearance` is IP-bound, so run ModelDeck on the same host as the browser if 403 persists. OAuth mode is for Claude Code, not claude.ai Pro/Max.
 
 #### Claude OAuth: missing Plan or 5h Reset At?
 
