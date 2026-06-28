@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,21 @@ from modeldeck.collectors.credentials.cursor_auth import (
 from modeldeck.config.loader import secrets_path
 
 _PROVIDERS = ("codex", "claude", "cursor")
+
+# Credential fields probed by `credentials verify`, per provider. Only the
+# presence (boolean) of each field is ever reported, never its value.
+_VERIFY_FIELDS: dict[str, tuple[str, ...]] = {
+    "codex": ("access_token", "refresh_token", "account_id", "api_key"),
+    "claude": (
+        "session_token",
+        "org_id",
+        "cf_clearance",
+        "device_id",
+        "access_token",
+        "refresh_token",
+    ),
+    "cursor": ("session_token", "access_token", "refresh_token", "admin_api_key"),
+}
 
 
 def _mask(value: str, *, full: bool) -> str:
@@ -143,6 +159,91 @@ def cmd_credentials_print(args: argparse.Namespace) -> int:
     return 0
 
 
+def _set_fields(secrets: object, provider: str) -> dict[str, bool]:
+    """Return which credential fields are set (booleans only, no values)."""
+    fields = _VERIFY_FIELDS.get(provider, ())
+    return {name: bool(getattr(secrets, name, "")) for name in fields}
+
+
+def _verify_hint(status: str, raw_safe: dict[str, Any] | None) -> str:
+    """Derive an actionable hint from the snapshot, if any."""
+    if isinstance(raw_safe, dict) and raw_safe.get("hint"):
+        return str(raw_safe["hint"])
+    if status == "auth_error":
+        return "check_auth_mode_and_recopy_credentials"
+    if status == "rate_limited":
+        return "retry_later_reduce_poll_frequency"
+    return ""
+
+
+def cmd_credentials_verify(args: argparse.Namespace) -> int:
+    """Probe a provider's live credentials and report status without leaking values."""
+    from modeldeck.collectors.auth_resolve import (
+        pick_claude_mode,
+        pick_codex_mode,
+        pick_cursor_mode,
+        resolve_claude_secrets,
+        resolve_codex_secrets,
+        resolve_cursor_secrets,
+    )
+    from modeldeck.collectors.base import build_collectors
+    from modeldeck.config.loader import ProviderSecrets, ProviderToggle, load_config
+
+    provider = args.provider
+    config, secrets = load_config()
+    provider_secrets = secrets.providers.get(provider, ProviderSecrets())
+
+    toggle_data = config.providers.model_dump().get(provider, {})
+    toggle = ProviderToggle.model_validate(toggle_data)
+    resolvers = {
+        "codex": (resolve_codex_secrets, pick_codex_mode),
+        "claude": (resolve_claude_secrets, pick_claude_mode),
+        "cursor": (resolve_cursor_secrets, pick_cursor_mode),
+    }
+    resolve, pick = resolvers[provider]
+    resolved = resolve(toggle, provider_secrets)
+    mode = pick(toggle, resolved)
+    set_fields = _set_fields(resolved, provider)
+
+    collectors = {c.provider_id: c for c in build_collectors(config, secrets)}
+    collector = collectors.get(provider)
+    if collector is None:
+        print(f"# {provider}: provider disabled in config (set enabled: true)")
+        print(f"auth_mode: {mode}")
+        for name, present in set_fields.items():
+            print(f"  {name}: {'set' if present else 'missing'}")
+        return 1
+
+    snapshot = asyncio.run(collector.collect())
+    status = str(snapshot.status)
+    hint = _verify_hint(status, snapshot.raw_safe)
+    http_status = (
+        snapshot.raw_safe.get("http_status")
+        if isinstance(snapshot.raw_safe, dict)
+        else None
+    )
+
+    print(f"provider: {provider}")
+    print(f"auth_mode: {mode}")
+    print("credentials:")
+    for name, present in set_fields.items():
+        print(f"  {name}: {'set' if present else 'missing'}")
+    print(f"status: {status}")
+    if http_status is not None:
+        print(f"http_status: {http_status}")
+    if hint:
+        print(f"hint: {hint}")
+    return 0 if status == "ok" else 2
+
+
+def _cmd_credentials_verify_wrapper(args: argparse.Namespace) -> int:
+    if args.config_dir is not None:
+        import os
+
+        os.environ["MODELDECK_CONFIG_DIR"] = str(args.config_dir)
+    return cmd_credentials_verify(args)
+
+
 def register_credentials_commands(sub: argparse._SubParsersAction) -> None:
     """Register credentials subcommands on the CLI parser."""
     creds = sub.add_parser("credentials", help="Credential extraction helpers")
@@ -163,6 +264,17 @@ def register_credentials_commands(sub: argparse._SubParsersAction) -> None:
         help="Override MODELDECK_CONFIG_DIR for --write-secrets",
     )
     print_cmd.set_defaults(func=_cmd_credentials_print_wrapper)
+    verify_cmd = creds_sub.add_parser(
+        "verify", help="Probe live provider credentials and report status"
+    )
+    verify_cmd.add_argument("--provider", choices=_PROVIDERS, required=True)
+    verify_cmd.add_argument(
+        "--config-dir",
+        type=Path,
+        default=None,
+        help="Override MODELDECK_CONFIG_DIR",
+    )
+    verify_cmd.set_defaults(func=_cmd_credentials_verify_wrapper)
 
 
 def _cmd_credentials_print_wrapper(args: argparse.Namespace) -> int:

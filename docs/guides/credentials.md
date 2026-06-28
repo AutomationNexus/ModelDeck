@@ -105,22 +105,35 @@ For claude.ai Pro/Max subscribers.
 
 1. Sign in at [claude.ai](https://claude.ai)
 2. Open DevTools → Application → Cookies → `https://claude.ai`
-3. Copy:
+3. Copy **all four** cookies (not just the first two — the Cloudflare and
+   device cookies are what get you past HTTP 403):
    - `sessionKey` → `session_token`
-   - `lastActiveOrg` → `org_id`
-4. If you get HTTP 403, also copy `cf_clearance` (Cloudflare)
+   - `lastActiveOrg` → `org_id` (a UUID is normal)
+   - `cf_clearance` → `cf_clearance`
+   - `anthropic-device-id` → `device_id`
 
 ```yaml
 providers:
   claude:
     session_token: "sk-ant-sid01-..."
-    org_id: "org_..."
-    cf_clearance: ""   # optional
+    org_id: "..."
+    cf_clearance: ""   # paste cf_clearance; required for many 403s
+    device_id: ""      # paste anthropic-device-id when present
 ```
+
+!!! warning "Docker + cookie mode"
+    `cf_clearance` is bound to the **IP and User-Agent** that solved the
+    Cloudflare challenge. When ModelDeck runs in Docker, the container's
+    outbound IP differs from your browser, so claude.ai can still return
+    **403** even with correct cookies. If 403 persists after re-copying all
+    four cookies, run ModelDeck on the same host/IP as the browser. Use
+    `modeldeck credentials verify --provider claude` to confirm the live
+    status and hint.
 
 ### OAuth (`auth_mode: oauth`)
 
-For Claude Code subscribers.
+For **Claude Code** subscribers only. claude.ai Pro/Max web subscriptions
+use `cookie` mode above, not `oauth`.
 
 1. Sign in with Claude Code CLI on a machine with `~/.claude/.credentials.json`
 2. Copy `claudeAiOauth.accessToken` and `refreshToken`, or bind-mount the file:
@@ -220,7 +233,7 @@ Docker: ensure `./config` is bind-mounted read-write (default in `templates/dock
 | Symptom | Fix |
 |---------|-----|
 | Codex `api` fails with 401 | Use `sk-admin-*` key, not `sk-proj-*` |
-| Claude 403 | Add `cf_clearance` cookie |
+| Claude 403 (cookie) | Copy all 4 cookies incl. `cf_clearance`; in Docker, run on the browser's host/IP |
 | Cursor enterprise 403 | Confirm Team/Enterprise plan and admin key scope |
 | Weekly sensor empty | Normal for Cursor personal (billing cycle only) |
 

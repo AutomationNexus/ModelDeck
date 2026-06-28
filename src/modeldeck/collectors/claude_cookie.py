@@ -14,6 +14,12 @@ from modeldeck.schemas.snapshot import CollectorStatus, ProviderSnapshot
 
 logger = get_logger(__name__)
 
+_BROWSER_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    " AppleWebKit/537.36 (KHTML, like Gecko)"
+    " Chrome/124.0.0.0 Safari/537.36"
+)
+
 
 class ClaudeCookieCollector:
     """Collect Claude subscription usage via claude.ai session cookies."""
@@ -50,11 +56,15 @@ class ClaudeCookieCollector:
             snapshot.display_name = self._display_name
             return snapshot
         except httpx.HTTPStatusError as exc:
+            raw_safe: dict[str, Any] = {"http_status": exc.response.status_code}
+            if exc.response.status_code == 403:
+                raw_safe["auth_mode"] = "cookie"
+                raw_safe["hint"] = "cf_clearance_expired_or_docker_ip"
             return error_snapshot(
                 provider_id,
                 self._display_name,
                 status_from_http_error(exc),
-                {"http_status": exc.response.status_code},
+                raw_safe,
             )
         except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
             logger.warning("Claude cookie collection failed: %s", type(exc).__name__)
@@ -73,9 +83,18 @@ class ClaudeCookieCollector:
             parts.append(f"anthropic-device-id={self._secrets.device_id}")
         return "; ".join(parts)
 
+    def _build_headers(self) -> dict[str, str]:
+        return {
+            "Cookie": self._cookie_header(),
+            "User-Agent": _BROWSER_USER_AGENT,
+            "Accept": "application/json",
+            "Referer": "https://claude.ai/",
+            "Origin": "https://claude.ai",
+        }
+
     async def _fetch_usage(self) -> dict[str, Any]:
         url = f"https://claude.ai/api/organizations/{self._secrets.org_id}/usage"
-        headers = {"Cookie": self._cookie_header()}
+        headers = self._build_headers()
         if self._client is not None:
             response = await self._client.get(url, headers=headers)
             response.raise_for_status()
