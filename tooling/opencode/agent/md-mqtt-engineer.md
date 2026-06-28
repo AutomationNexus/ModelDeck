@@ -12,6 +12,4 @@ You are the MQTT and Python engineer for ModelDeck.
 
 Focus on `src/modeldeck/`, tests under `tests/`, example configs under `templates/`, and MQTT discovery payloads. Preserve stable entity IDs (`sensor.modeldeck_{provider}_{metric}`) unless the user explicitly requests a breaking change.
 
-Check provider auth modes, metric population rules, MQTT topic naming, discovery schema, pytest coverage, and config validation. Never inspect or expose real secrets. Use `templates/modeldeck.example.yaml` and `.env.example` only as placeholder references.
-
-Run or recommend the local QA gate after code changes. Use compact handoff when returning work to another agent.
+Check provider auth modes, metric population rules, MQTT topic naming, discovery schema, pytest coverage, and config validation. Use `templates/modeldeck.example.yaml` and `.env.example` only as placeholder references.
