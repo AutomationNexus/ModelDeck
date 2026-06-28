@@ -2,6 +2,20 @@
 
 All notable changes are documented here.
 
+## [0.0.7] - 2026-06-28
+
+### Added
+
+- Add `modeldeck credentials verify` for safe provider credential diagnostics.
+
+### Fixed
+
+- Send browser-like headers for Claude cookie usage requests and add safe 403 hints.
+
+### Changed
+
+- Document all required Claude cookie fields and the Docker `cf_clearance` caveat.
+
 ## [0.0.6] - 2026-06-27
 
 ### Changed
