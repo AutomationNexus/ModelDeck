@@ -74,14 +74,23 @@ def pick_codex_mode(toggle: ProviderToggle, secrets: ProviderSecrets) -> str:
 
 
 def pick_claude_mode(toggle: ProviderToggle, secrets: ProviderSecrets) -> str:
-    """Return the effective Claude auth mode."""
+    """Return the effective Claude auth mode.
+
+    Auto-resolution order (when auth_mode is 'auto'):
+    1. OAuth creds present (access_token or refresh_token) -> oauth
+    2. Cookie creds present (session_token or org_id) -> cookie
+    3. Neither -> cookie (default; prompts for credentials)
+
+    When both OAuth and cookie creds are present, OAuth takes precedence.
+    Explicit auth_mode values ('cookie', 'oauth') bypass this logic entirely.
+    """
     mode = toggle.auth_mode
     if mode != "auto":
         return mode
-    if secrets.session_token or secrets.org_id:
-        return "cookie"
     if secrets.access_token or secrets.refresh_token:
         return "oauth"
+    if secrets.session_token or secrets.org_id:
+        return "cookie"
     return "cookie"
 
 

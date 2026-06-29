@@ -22,6 +22,11 @@ def parse_version(tag: str) -> str:
         tag = tag[1:]
     if not re.fullmatch(r"\d+\.\d+\.\d+", tag):
         raise ValueError(f"tag must be semver vX.Y.Z, got {tag!r}")
+    if tag == "0.0.0":
+        raise ValueError(
+            "tag resolved to v0.0.0 — this is the workflow fallback sentinel, not a real "
+            "release. Ensure GH_TOKEN is set and the release tag exists before syncing."
+        )
     return tag
 
 

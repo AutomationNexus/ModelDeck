@@ -65,8 +65,13 @@ jobs:
       - name: Check if sync is needed
         id: sync_check
         run: |
+          set -euo pipefail
+          TAG="${{ needs.docker-release.outputs.tag_name }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "v0.0.0" ]; then
+            echo "::error::HAOS sync aborted: resolved tag is empty or sentinel '${TAG}'. Check docker-release job outputs."
+            exit 1
+          fi
           pip install pyyaml -q
-          TAG=$(gh api repos/automationnexus/ModelDeck/releases/latest --jq '.tag_name' 2>/dev/null || echo "v0.0.0")
           if python tools/sync_haos_addon.py haos-checkout "$TAG" --check-only; then
             echo "needed=false" >> "$GITHUB_OUTPUT"
           else
@@ -75,9 +80,14 @@ jobs:
       - name: Apply stable pin
         if: steps.sync_check.outputs.needed == 'true'
         run: |
+          set -euo pipefail
+          TAG="${{ needs.docker-release.outputs.tag_name }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "v0.0.0" ]; then
+            echo "::error::HAOS sync aborted: resolved tag is empty or sentinel '${TAG}'. Check docker-release job outputs."
+            exit 1
+          fi
           pip install pyyaml -q
-          TAG=$(gh api repos/automationnexus/ModelDeck/releases/latest --jq '.tag_name' 2>/dev/null || echo "v0.0.0")
-          python tools/sync_haos_addon.py haos-checkout "$TAG"
+          ADDON_NEW_PARENT="${TAG#v}" python tools/sync_haos_addon.py haos-checkout "$TAG"
           cd haos-checkout && python tools/validate_ha_addon.py
       - name: Open PR on ModelDeck-HAOS dev
         id: cpr

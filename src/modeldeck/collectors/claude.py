@@ -9,7 +9,10 @@ from modeldeck.collectors.claude_cookie import ClaudeCookieCollector
 from modeldeck.collectors.claude_oauth import ClaudeOAuthCollector
 from modeldeck.collectors.metrics import base_metrics
 from modeldeck.config.loader import AppConfig, ProviderSecrets, ProviderToggle
+from modeldeck.core.logging import get_logger
 from modeldeck.schemas.snapshot import MetricKind, ProviderSnapshot
+
+logger = get_logger(__name__)
 
 
 class ClaudeCollector:
@@ -39,6 +42,7 @@ class ClaudeCollector:
     async def collect(self) -> ProviderSnapshot:
         """Fetch Claude usage using the configured auth mode."""
         mode = pick_claude_mode(self._toggle, self._secrets)
+        logger.info("Claude collecting via mode=%s", mode)
         name = self._display_name()
         if mode == "oauth":
             collector = ClaudeOAuthCollector(self._secrets, name, self._client)

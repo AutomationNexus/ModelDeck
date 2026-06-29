@@ -114,3 +114,43 @@ async def test_claude_cookie_403_sets_hint():
     assert snap.raw_safe.get("http_status") == 403
     assert snap.raw_safe.get("auth_mode") == "cookie"
     assert snap.raw_safe.get("hint") == "cf_clearance_expired_or_docker_ip"
+
+
+@pytest.mark.asyncio
+async def test_claude_cookie_403_presence_flags_both_absent():
+    """D2: 403 raw_safe must include cf_clearance_present and device_id_present booleans."""
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    toggle = no_file_toggle(enabled=True, auth_mode="cookie")
+    # Neither cf_clearance nor device_id supplied
+    secrets = ProviderSecrets(session_token="session-abc", org_id="org-123")
+    collector = ClaudeCollector(AppConfig(), secrets, toggle, client=client)
+    snap = await collector.collect()
+    assert snap.status == CollectorStatus.AUTH_ERROR
+    assert snap.raw_safe is not None
+    assert snap.raw_safe.get("cf_clearance_present") is False
+    assert snap.raw_safe.get("device_id_present") is False
+
+
+@pytest.mark.asyncio
+async def test_claude_cookie_403_presence_flags_both_present():
+    """D2: presence flags should be True when cookies are supplied."""
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    toggle = no_file_toggle(enabled=True, auth_mode="cookie")
+    secrets = ProviderSecrets(
+        session_token="session-abc",
+        org_id="org-123",
+        cf_clearance="cf-value",
+        device_id="device-value",
+    )
+    collector = ClaudeCollector(AppConfig(), secrets, toggle, client=client)
+    snap = await collector.collect()
+    assert snap.status == CollectorStatus.AUTH_ERROR
+    assert snap.raw_safe is not None
+    assert snap.raw_safe.get("cf_clearance_present") is True
+    assert snap.raw_safe.get("device_id_present") is True

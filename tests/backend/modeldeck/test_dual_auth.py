@@ -61,6 +61,63 @@ def test_pick_auth_modes_auto():
     )
 
 
+def test_pick_claude_mode_auto_oauth_wins_over_cookie():
+    """D4: when both OAuth and cookie creds are present, auto must resolve to oauth."""
+    secrets = ProviderSecrets(
+        access_token="at",
+        refresh_token="rt",
+        session_token="sk-ant-sid01",
+        org_id="org-123",
+    )
+    assert pick_claude_mode(ProviderToggle(auth_mode="auto"), secrets) == "oauth"
+
+
+def test_pick_claude_mode_auto_refresh_token_only_resolves_oauth():
+    """D4: refresh_token alone (no access_token) should still resolve to oauth."""
+    secrets = ProviderSecrets(refresh_token="rt")
+    assert pick_claude_mode(ProviderToggle(auth_mode="auto"), secrets) == "oauth"
+
+
+@pytest.mark.asyncio
+async def test_claude_oauth_refresh_first_when_no_access_token():
+    """D3: collector must exchange refresh_token before first usage call when no access_token."""
+    payload = json.loads((FIXTURES / "claude_oauth_usage.json").read_text(encoding="utf-8"))
+    calls: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        calls.append(url)
+        if "oauth/token" in url:
+            return httpx.Response(200, json={"access_token": "new-at", "refresh_token": "new-rt"})
+        return httpx.Response(200, json=payload)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    # Only refresh_token present; no access_token
+    secrets = ProviderSecrets(refresh_token="initial-rt")
+    snap = await ClaudeOAuthCollector(secrets, "Claude", client).collect()
+    assert snap.status == CollectorStatus.OK
+    # First call must have been the token exchange, not the usage endpoint
+    assert any("oauth/token" in c for c in calls), f"no token exchange in calls: {calls}"
+    token_idx = next(i for i, c in enumerate(calls) if "oauth/token" in c)
+    usage_idx = next(i for i, c in enumerate(calls) if "oauth/usage" in c)
+    assert token_idx < usage_idx, "token exchange must precede usage call"
+
+
+@pytest.mark.asyncio
+async def test_claude_oauth_refresh_first_fails_returns_auth_error():
+    """D3: if pre-emptive refresh fails, return auth_error immediately."""
+    async def handler(request: httpx.Request) -> httpx.Response:
+        # Token exchange fails
+        return httpx.Response(401)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    secrets = ProviderSecrets(refresh_token="bad-rt")
+    snap = await ClaudeOAuthCollector(secrets, "Claude", client).collect()
+    assert snap.status == CollectorStatus.AUTH_ERROR
+    assert snap.raw_safe is not None
+    assert snap.raw_safe.get("reason") == "refresh_token_exchange_failed"
+
+
 def test_resolve_secrets_from_files(tmp_path):
     """Credential file paths should merge into provider secrets."""
     codex_auth = tmp_path / "auth.json"
