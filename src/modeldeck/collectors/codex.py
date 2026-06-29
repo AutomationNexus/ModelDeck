@@ -60,7 +60,9 @@ class CodexCollector:
         if mode == "api":
             collector = CodexApiCollector(self._secrets, name, self._client)
         else:
-            collector = CodexSubscriptionCollector(self._secrets, name, self._client)
+            collector = CodexSubscriptionCollector(
+                self._secrets, name, self._client, self._account_id
+            )
         snapshot = await collector.collect(self.provider_id)
         snapshot.account_id = self._account_id
         snapshot.account_label = self._account_label

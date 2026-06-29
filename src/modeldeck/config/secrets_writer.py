@@ -20,10 +20,26 @@ _OAUTH_FIELDS = ("access_token", "refresh_token", "account_id")
 def persist_provider_oauth_tokens(
     provider_id: str,
     secrets: ProviderSecrets,
+    account_id: str = "default",
     *,
     secrets_file: Path | None = None,
 ) -> bool:
-    """Merge refreshed OAuth fields into secrets.yaml when persistence is enabled."""
+    """Merge refreshed OAuth fields into secrets.yaml when persistence is enabled.
+
+    Writes under ``providers[provider_id][account_id]`` in the nested
+    multi-account secrets format.
+
+    Parameters
+    ----------
+    provider_id:
+        e.g. ``"claude"`` or ``"codex"``.
+    secrets:
+        The refreshed ProviderSecrets object.
+    account_id:
+        The account slug (default ``"default"``).
+    secrets_file:
+        Override the secrets file path (for testing).
+    """
     try:
         config, _ = load_config()
         if not config.service.persist_refreshed_tokens:
@@ -49,16 +65,30 @@ def persist_provider_oauth_tokens(
         providers = {}
         raw["providers"] = providers
 
+    # Ensure provider block is nested {account_id: {fields}} format.
     provider_block = providers.setdefault(provider_id, {})
     if not isinstance(provider_block, dict):
         provider_block = {}
         providers[provider_id] = provider_block
 
+    # If existing block is flat (legacy), migrate to nested on write.
+    from modeldeck.config.addon_bootstrap import _ALL_SECRET_FIELDS
+
+    if any(k in _ALL_SECRET_FIELDS for k in provider_block):
+        # Flat format: migrate to nested under "default".
+        provider_block = {"default": dict(provider_block)}
+        providers[provider_id] = provider_block
+
+    account_block = provider_block.setdefault(account_id, {})
+    if not isinstance(account_block, dict):
+        account_block = {}
+        provider_block[account_id] = account_block
+
     updated = False
     for field in _OAUTH_FIELDS:
         value = getattr(secrets, field, "")
-        if value and provider_block.get(field) != value:
-            provider_block[field] = value
+        if value and account_block.get(field) != value:
+            account_block[field] = value
             updated = True
 
     if not updated:
@@ -71,5 +101,85 @@ def persist_provider_oauth_tokens(
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
     except OSError:
         pass
-    logger.info("Persisted refreshed OAuth tokens for provider %s", provider_id)
+    logger.info(
+        "Persisted refreshed OAuth tokens for provider %s account %s",
+        provider_id,
+        account_id,
+    )
+    return True
+
+
+def write_account_secrets(
+    provider_id: str,
+    account_id: str,
+    fields: dict[str, str],
+    *,
+    secrets_file: Path | None = None,
+) -> bool:
+    """Write arbitrary secret fields for a provider account into secrets.yaml.
+
+    Used by the login wizard and web UI to save newly obtained tokens.
+    Only non-empty field values are written.
+
+    Parameters
+    ----------
+    provider_id:
+        e.g. ``"claude"`` or ``"codex"``.
+    account_id:
+        The account slug.
+    fields:
+        Dict of secret field names → values.
+    secrets_file:
+        Override the secrets file path (for testing).
+    """
+    path = secrets_file or secrets_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    raw: dict[str, Any] = {}
+    if path.exists():
+        try:
+            loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                raw = loaded
+        except (OSError, yaml.YAMLError):
+            logger.warning("Could not read secrets file; will overwrite")
+
+    providers = raw.setdefault("providers", {})
+    if not isinstance(providers, dict):
+        providers = {}
+        raw["providers"] = providers
+
+    provider_block = providers.setdefault(provider_id, {})
+    if not isinstance(provider_block, dict):
+        provider_block = {}
+        providers[provider_id] = provider_block
+
+    # Migrate flat format if needed.
+    from modeldeck.config.addon_bootstrap import _ALL_SECRET_FIELDS
+
+    if any(k in _ALL_SECRET_FIELDS for k in provider_block):
+        provider_block = {"default": dict(provider_block)}
+        providers[provider_id] = provider_block
+
+    account_block = provider_block.setdefault(account_id, {})
+    if not isinstance(account_block, dict):
+        account_block = {}
+        provider_block[account_id] = account_block
+
+    for key, value in fields.items():
+        if value:
+            account_block[key] = value
+
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    tmp.replace(path)
+    try:
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
+    logger.info(
+        "Wrote secrets for provider %s account %s",
+        provider_id,
+        account_id,
+    )
     return True

@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from modeldeck.cli.credentials_cmd import register_credentials_commands
+from modeldeck.cli.login_cmd import register_login_commands
 from modeldeck.collectors.base import build_collectors
 from modeldeck.collectors.metrics import effective_metrics
 from modeldeck.config.addon_bootstrap import load_options_file, render_addon_config
@@ -55,6 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     disc_pub.set_defaults(func=_cmd_discovery_publish)
 
     register_credentials_commands(sub)
+    register_login_commands(sub)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

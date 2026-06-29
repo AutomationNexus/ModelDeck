@@ -62,7 +62,7 @@ class ClaudeCollector:
         logger.info("Claude collecting via mode=%s", mode)
         name = self._display_name()
         if mode == "oauth":
-            collector = ClaudeOAuthCollector(self._secrets, name, self._client)
+            collector = ClaudeOAuthCollector(self._secrets, name, self._client, self._account_id)
         else:
             collector = ClaudeCookieCollector(self._secrets, name, self._client)
         snapshot = await collector.collect(self.provider_id)

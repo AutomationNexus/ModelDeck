@@ -27,10 +27,12 @@ class CodexSubscriptionCollector:
         secrets: ProviderSecrets,
         display_name: str,
         client: httpx.AsyncClient | None = None,
+        account_id: str = "default",
     ) -> None:
         self._secrets = secrets
         self._display_name = display_name
         self._client = client
+        self._account_id = account_id
 
     async def collect(self, provider_id: str = "codex") -> ProviderSnapshot:
         """Fetch subscription usage or return an error snapshot."""
@@ -103,7 +105,7 @@ class CodexSubscriptionCollector:
                     self._secrets.refresh_token = refresh
                 from modeldeck.config.secrets_writer import persist_provider_oauth_tokens
 
-                persist_provider_oauth_tokens("codex", self._secrets)
+                persist_provider_oauth_tokens("codex", self._secrets, self._account_id)
                 return True
         except httpx.HTTPError:
             logger.warning("Codex token refresh failed")
