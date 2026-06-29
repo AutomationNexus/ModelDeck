@@ -98,5 +98,32 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
         run: |
+          set -euo pipefail
           PR="${{ steps.cpr.outputs.pull-request-number }}"
-          gh pr merge "${PR}" --repo "automationnexus/ModelDeck-HAOS" --merge --delete-branch
+          R="automationnexus/ModelDeck-HAOS"
+          head_sha=$(gh pr view "${PR}" --repo "${R}" --json headRefOid --jq '.headRefOid')
+          echo "Waiting for CI on HAOS sync PR #${PR} (head ${head_sha})..."
+          for attempt in $(seq 1 60); do
+            runs_json=$(gh api "repos/${R}/actions/runs" \
+              --method GET \
+              --field event=pull_request \
+              --field head_sha="${head_sha}" \
+              --field per_page=100 \
+              --jq '[.workflow_runs[] | select(.path != ".github/workflows/auto-merge.yml")]')
+            ci_count=$(jq '[.[] | select(.path == ".github/workflows/ci.yml")] | length' <<<"${runs_json}")
+            pending=$(jq '[.[] | select(.status != "completed")] | length' <<<"${runs_json}")
+            failing=$(jq '[.[] | select(.status == "completed" and (.conclusion | IN("success", "skipped", "neutral") | not))] | length' <<<"${runs_json}")
+            echo "attempt=${attempt} ci_count=${ci_count} pending=${pending} failing=${failing}"
+            if [ "${ci_count}" -gt 0 ] && [ "${pending}" -eq 0 ] && [ "${failing}" -eq 0 ]; then
+              echo "HAOS sync PR #${PR} CI is green."; break
+            fi
+            if [ "${failing}" -gt 0 ]; then
+              echo "::error::HAOS sync PR #${PR} CI failed."; exit 1
+            fi
+            if [ "${attempt}" -eq 60 ]; then
+              echo "::error::Timed out waiting for HAOS sync PR #${PR} CI."; exit 1
+            fi
+            sleep 30
+          done
+          gh pr merge "${PR}" --repo "${R}" --merge --delete-branch
+          echo "Merged HAOS sync PR #${PR}."
