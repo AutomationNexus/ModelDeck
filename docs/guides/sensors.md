@@ -62,6 +62,8 @@ Replace `{provider}` with `codex`, `claude`, or `cursor`.
 
 For full parity with Codex-style sensors (plan + 5h reset more often), use **cookie** mode on claude.ai Pro/Max.
 
+**`auto` mode resolution order:** OAuth (`access_token` or `refresh_token`) → cookie (`session_token` or `org_id`) → cookie default. When both OAuth and cookie credentials are present, OAuth takes precedence. Set `auth_mode: cookie` or `auth_mode: oauth` explicitly to override. The resolved mode is logged at INFO on every poll cycle (`Claude collecting via mode=...`).
+
 ### Cursor
 
 | Sensor | `personal` | `enterprise` |

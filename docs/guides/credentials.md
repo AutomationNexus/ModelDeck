@@ -130,6 +130,11 @@ providers:
     `modeldeck credentials verify --provider claude` to confirm the live
     status and hint.
 
+    When a 403 occurs, the collector logs `cf_clearance_present` and
+    `device_id_present` (booleans, no values) to help diagnose which cookies
+    were missing. Check `sensor.modeldeck_claude_status` raw attributes or
+    run `modeldeck credentials verify --provider claude` for the full hint.
+
 ### OAuth (`auth_mode: oauth`)
 
 For **Claude Code** subscribers only. claude.ai Pro/Max web subscriptions
@@ -233,7 +238,9 @@ Docker: ensure `./config` is bind-mounted read-write (default in `templates/dock
 | Symptom | Fix |
 |---------|-----|
 | Codex `api` fails with 401 | Use `sk-admin-*` key, not `sk-proj-*` |
-| Claude 403 (cookie) | Copy all 4 cookies incl. `cf_clearance`; in Docker, run on the browser's host/IP |
+| Claude 403 (cookie) | Copy all 4 cookies incl. `cf_clearance` and `device_id`; in Docker, run on the browser's host/IP; check `cf_clearance_present`/`device_id_present` in verify output |
+| Claude `auto` picks wrong mode | Set `auth_mode` explicitly (`cookie` or `oauth`). `auto` prefers OAuth when `access_token`/`refresh_token` are present, then cookie when `session_token`/`org_id` are present |
+| Claude OAuth only has `refresh_token` | Supported — ModelDeck will exchange it for an `access_token` before the first poll |
 | Cursor enterprise 403 | Confirm Team/Enterprise plan and admin key scope |
 | Weekly sensor empty | Normal for Cursor personal (billing cycle only) |
 

@@ -60,6 +60,8 @@ class ClaudeCookieCollector:
             if exc.response.status_code == 403:
                 raw_safe["auth_mode"] = "cookie"
                 raw_safe["hint"] = "cf_clearance_expired_or_docker_ip"
+                raw_safe["cf_clearance_present"] = bool(self._secrets.cf_clearance)
+                raw_safe["device_id_present"] = bool(self._secrets.device_id)
             return error_snapshot(
                 provider_id,
                 self._display_name,
