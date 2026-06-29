@@ -1,81 +1,54 @@
 # ModelDeck OpenCode Rules
 
-This repo is the ModelDeck Python service: a Dockerized AI usage and quota bridge for Home Assistant via MQTT Discovery.
-
-## Branch Rules
-
-- `dev` is the workbench branch; `main` is stable. Never push directly to `dev` or `main`.
-- Create a feature branch from `dev` for all changes; never commit on `dev` or `main` directly.
-- Land changes via feature branch → PR to `dev` → CI green → merge → delete feature branch.
-- Promote `dev` to `main` only through the **Promote dev to main** workflow after dev CI is green.
-- Enable local hook once per clone: `tools\install-githooks.cmd` (blocks direct pushes to `dev`/`main`).
-- See `docs/runbooks/branch-policy.md` for the exact workflow.
-
 ## Shell (Windows local dev)
 
-Agents run terminal commands in PowerShell (`powershell`; use `pwsh` in `opencode.json` when PowerShell 7+ is installed).
-
 - Chain commands with `;`, not `&&` or `||`.
-- Use Windows paths (`\` or quoted full paths). Do not mix cmd, bash, and PowerShell syntax in one pipeline.
-- Outside the clone or when `gh` cannot infer the repo: `gh --repo automationnexus/ModelDeck <subcommand>`.
-- For failed CI logs: `gh run view <id> --log-failed` (or `--repo automationnexus/ModelDeck`); use `Select-Object -Last N` instead of `tail`.
-- When debugging, run one command per tool call.
-
-CI and `.github/workflows` stay bash on `ubuntu-latest`; do not change workflow shells for local Windows agent rules.
+- Use Windows paths (`\` or quoted full paths). Do not mix cmd/bash/PowerShell syntax.
+- Outside clone: `gh --repo automationnexus/ModelDeck <subcommand>`.
+- For CI logs: `gh run view <id> --log-failed`; use `Select-Object -Last N` instead of `tail`.
+- Debug: one command per tool call.
+- CI workflows keep bash on `ubuntu-latest`; do not change workflow shells.
 
 ## Safety Rules
 
-- Start every task with `git status --short --branch` before edits.
-- Never read, print, summarize, copy, edit, or commit credential values.
-- Treat `.env`, `.env.*`, `config/secrets.yaml`, provider tokens, API keys, and session cookies as private.
-- Never create or track `AGENT-HANDOFF.md`, `AGENTS.md`, or `CLAUDE.md`.
+- Start every task with `git status --short --branch`.
+- Never read, print, copy, edit, or commit credentials (.env, secrets.yaml, tokens, API keys, cookies).
+- Never create/track `AGENT-HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`.
 - Do not commit `opencode.json` or `.opencode/`.
 
-## QA Gates
-
-Before opening a PR, run local QA in the same task:
+## QA Gates (run before PR)
 
 - `git status --short --branch`
 - `ruff check src tests`
 - `python -m pytest -q`
-- `pre-commit run --all-files` (when pre-commit is installed)
+- `pre-commit run --all-files` (when installed)
 - `git diff --check`
 
-Invoke `@md-qa-gatekeeper` or run `/md-qa` before push. Run `/md-prepush` before opening or updating a PR.
+Invoke `@md-qa-gatekeeper` or `/md-qa` before push. `/md-prepush` before opening PR.
 
-## Agent Workflow
-
-- New sessions start in built-in `plan` mode (read-only). Switch to `build` with Tab or run `/md-execute` after plan approval.
-- For MQTT discovery, provider polling, or sensor schema work, invoke `@md-mqtt-engineer` before finalizing the plan.
-- When the user approves a plan and says go, build, or execute, run `/md-execute` (built-in `build` orchestrator).
-- `build` delegates to `@md-mqtt-engineer` for implementation, `@md-qa-gatekeeper` for local QA, and `@md-reviewer` for independent review.
-- Land git changes with a feature branch and PR to `dev`; never push directly to `dev` or `main`.
-- Use `@md-opus-solver` only for hard cross-module bugs, architecture conflicts, or cases where cheaper agents disagree.
-
-## Local OpenCode Setup
-
-- `opencode.json` and `.opencode/` are local-only and must not be committed.
-- Copy from `opencode.json.example` when setting up a new machine, then run `tools\bootstrap-opencode.cmd`.
-- Committed seeds live in `tooling/opencode/`; bootstrap mirrors them into local `.opencode/`.
-
-## Token-Efficient Handoff
-
-Before switching agents or models, write a compact handoff:
+## Token-Efficient Handoff (agent-to-agent)
 
 - Goal: one sentence.
 - Files read/touched: paths only.
 - Current branch/status: short.
-- Decisions made: max 5 bullets.
+- Decisions: max 5 bullets.
 - Remaining work: max 5 bullets.
-- Validation run: commands and pass/fail only.
-- Risks/blockers: actionable items only.
+- Validation: commands + pass/fail only.
+- Risks/blockers: actionable only.
 
-Do not paste large file contents, raw diffs, secrets, or full logs. Prefer paths, MQTT topic names, sensor keys, command names, and short status lines.
+No large file contents, raw diffs, secrets, or full logs.
 
 ## ModelDeck Conventions
 
-- Python package lives under `src/modeldeck/`.
-- Tests live under `tests/`; integration tests use Mosquitto (`pytest -m integration`).
+- Package: `src/modeldeck/`. Tests: `tests/`. Integration: `pytest -m integration`.
 - Example config: `templates/modeldeck.example.yaml`.
-- Preserve stable MQTT entity IDs (`sensor.modeldeck_{provider}_{metric}`) unless the user requests a breaking change.
-- Keep changes minimal and run the full QA gate before PR.
+- Preserve stable MQTT entity IDs (`sensor.modeldeck_{provider}_{metric}`) unless breaking change requested.
+- Keep changes minimal; run full QA gate before PR.
+
+## Branch Policy
+
+See `docs/runbooks/branch-policy.md`. Summary:
+- `dev` is workbench, `main` is stable. No direct pushes.
+- Feature branch → PR → CI green → merge → delete branch.
+- Promote `dev`→`main` only via **Promote dev to main** workflow.
+- Enable hooks: `tools\install-githooks.cmd`.

@@ -9,8 +9,6 @@
       "mode": "primary",
       "model": "openai/gpt-5.5",
       "instructions": [
-        ".opencode/project-rules.md",
-        "docs/runbooks/branch-policy.md",
         ".opencode/plan-instructions.md"
       ]
     },
@@ -18,8 +16,6 @@
       "mode": "primary",
       "model": "openai/gpt-5.5",
       "instructions": [
-        ".opencode/project-rules.md",
-        "docs/runbooks/branch-policy.md",
         ".opencode/build-instructions.md"
       ]
     },
@@ -39,9 +35,7 @@
     ]
   },
   "instructions": [
-    ".opencode/project-rules.md",
-    "docs/runbooks/branch-policy.md",
-    "docs/runbooks/opencode-init.md"
+    ".opencode/project-rules.md"
   ],
   "permission": {
     "read": {
