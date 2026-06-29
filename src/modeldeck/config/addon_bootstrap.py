@@ -34,6 +34,11 @@ _PROVIDER_AUTH_DEFAULTS: dict[str, str] = {
     "cursor": "personal",
 }
 
+# All known secret fields across providers (used for flat-vs-nested detection).
+_ALL_SECRET_FIELDS: frozenset[str] = frozenset(
+    field for fields in _PROVIDER_SECRET_FIELDS.values() for field in fields
+)
+
 
 def _opt(options: dict[str, Any], key: str, default: Any = "") -> Any:
     value = options.get(key, default)
@@ -125,14 +130,16 @@ def normalize_options(options: dict[str, Any]) -> dict[str, Any]:
     return flat
 
 
-def _provider_toggle(options: dict[str, Any], provider_id: str) -> dict[str, Any]:
+def _provider_account(options: dict[str, Any], provider_id: str) -> dict[str, Any]:
+    """Build the default ProviderAccount dict for a provider from flat options."""
     prefix = provider_id
     return {
+        "id": "default",
+        "label": _opt(options, f"{prefix}_account_label") or "",
         "enabled": bool(_opt(options, f"{prefix}_enabled", False)),
         "auth_mode": str(
             _opt(options, f"{prefix}_auth_mode", _PROVIDER_AUTH_DEFAULTS[provider_id])
         ),
-        "account_label": _opt(options, f"{prefix}_account_label") or None,
     }
 
 
@@ -166,9 +173,9 @@ def build_config_dict(options: dict[str, Any]) -> dict[str, Any]:
         },
         "providers": {
             "mock": {"enabled": False},
-            "codex": _provider_toggle(opts, "codex"),
-            "claude": _provider_toggle(opts, "claude"),
-            "cursor": _provider_toggle(opts, "cursor"),
+            "codex": [_provider_account(opts, "codex")],
+            "claude": [_provider_account(opts, "claude")],
+            "cursor": [_provider_account(opts, "cursor")],
         },
     }
 
@@ -177,15 +184,29 @@ def build_secrets_dict(options: dict[str, Any]) -> dict[str, Any]:
     """Build secrets.yaml content from add-on options."""
     opts = normalize_options(options)
     mqtt_password = str(_opt(opts, "mqtt_password", "")).strip()
-    providers: dict[str, dict[str, str]] = {}
+    providers: dict[str, dict[str, Any]] = {}
     for provider_id in ("codex", "claude", "cursor"):
         block = _provider_secrets(opts, provider_id)
         if block:
-            providers[provider_id] = block
+            providers[provider_id] = {"default": block}
     secrets: dict[str, Any] = {"mqtt": {}, "providers": providers}
     if mqtt_password:
         secrets["mqtt"]["password"] = mqtt_password
     return secrets
+
+
+def _normalize_providers_raw(providers: dict[str, Any]) -> dict[str, Any]:
+    """Ensure provider secrets are in nested {account_id: {fields}} format."""
+    result: dict[str, Any] = {}
+    for pid, block in providers.items():
+        if not isinstance(block, dict):
+            continue  # Skip invalid/corrupted entries
+        # Flat format: has secret field keys at the top level
+        if any(k in _ALL_SECRET_FIELDS for k in block):
+            result[pid] = {"default": block}
+        else:
+            result[pid] = block
+    return result
 
 
 def _merge_secrets(
@@ -198,34 +219,48 @@ def _merge_secrets(
     if reset or not existing:
         return incoming
 
-    merged: dict[str, Any] = {
-        "mqtt": dict(existing.get("mqtt") or {}),
-        "providers": {
-            pid: dict(block)
-            for pid, block in (existing.get("providers") or {}).items()
-            if isinstance(block, dict)
-        },
-    }
+    # Normalise both to nested {account_id: {fields}} format.
+    existing_providers = _normalize_providers_raw(existing.get("providers") or {})
+    incoming_providers = _normalize_providers_raw(incoming.get("providers") or {})
 
+    # Start with existing MQTT, then overlay incoming password.
+    merged_mqtt = dict(existing.get("mqtt") or {})
     incoming_mqtt = incoming.get("mqtt") or {}
     if isinstance(incoming_mqtt, dict) and incoming_mqtt.get("password"):
-        merged.setdefault("mqtt", {})["password"] = incoming_mqtt["password"]
+        merged_mqtt["password"] = incoming_mqtt["password"]
 
-    for provider_id, incoming_block in (incoming.get("providers") or {}).items():
-        if not isinstance(incoming_block, dict):
+    # Merge provider account secrets.
+    merged_providers: dict[str, Any] = {}
+
+    for pid, accounts in existing_providers.items():
+        merged_providers[pid] = dict(accounts) if isinstance(accounts, dict) else {}
+
+    for pid, incoming_accounts in incoming_providers.items():
+        if not isinstance(incoming_accounts, dict):
             continue
-        current = merged.setdefault("providers", {}).setdefault(provider_id, {})
-        if not isinstance(current, dict):
-            current = {}
-            merged["providers"][provider_id] = current
-        for field, value in incoming_block.items():
-            if not value:
-                continue
-            if field in _OAUTH_FIELDS and str(current.get(field, "")).strip():
-                continue
-            current[field] = value
+        if pid not in merged_providers:
+            merged_providers[pid] = {}
 
-    return merged
+        for account_id, incoming_fields in incoming_accounts.items():
+            if not isinstance(incoming_fields, dict):
+                continue
+            current = merged_providers[pid].get(account_id, {})
+            if not isinstance(current, dict):
+                current = {}
+
+            for field, value in incoming_fields.items():
+                if not value:
+                    continue
+                if field in _OAUTH_FIELDS and str(current.get(field, "")).strip():
+                    continue
+                current[field] = value
+
+            merged_providers[pid][account_id] = current
+
+    return {
+        "mqtt": merged_mqtt,
+        "providers": merged_providers,
+    }
 
 
 def render_addon_config(

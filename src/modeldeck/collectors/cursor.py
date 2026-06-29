@@ -8,7 +8,7 @@ from modeldeck.collectors.auth_resolve import pick_cursor_mode, resolve_cursor_s
 from modeldeck.collectors.cursor_enterprise import CursorEnterpriseCollector
 from modeldeck.collectors.cursor_personal import CursorPersonalCollector
 from modeldeck.collectors.metrics import base_metrics
-from modeldeck.config.loader import AppConfig, ProviderSecrets, ProviderToggle
+from modeldeck.config.loader import AppConfig, ProviderAccount, ProviderSecrets, ProviderToggle
 from modeldeck.schemas.snapshot import MetricKind, ProviderSnapshot
 
 
@@ -22,30 +22,51 @@ class CursorCollector:
         self,
         config: AppConfig,
         secrets: ProviderSecrets,
-        toggle: ProviderToggle | None = None,
-        account_label: str | None = None,
+        account: ProviderAccount | ProviderToggle | None = None,
+        account_id: str = "default",
         client: httpx.AsyncClient | None = None,
     ) -> None:
-        self._toggle = toggle or ProviderToggle()
-        self._secrets = resolve_cursor_secrets(self._toggle, secrets)
-        self._account_label = account_label or self._toggle.account_label
+        # Normalise to ProviderAccount internally; accept ProviderToggle for backward compat.
+        if isinstance(account, ProviderAccount):
+            self._account = account
+            self._account_id = account.id
+            self._account_label = account.label
+        elif isinstance(account, ProviderToggle):
+            self._account = ProviderAccount(
+                id=account_id,
+                label=account.account_label or "",
+                enabled=account.enabled,
+                auth_mode=account.auth_mode,
+                credential_path=account.credential_path,
+            )
+            self._account_id = account_id
+            self._account_label = account.account_label or ""
+        else:
+            self._account = ProviderAccount(id=account_id)
+            self._account_id = account_id
+            self._account_label = ""
+        self._secrets = resolve_cursor_secrets(self._account, secrets)
         self._client = client
 
     def supported_metrics(self) -> list[MetricKind]:
         """Return Cursor metrics for the configured auth mode."""
-        mode = pick_cursor_mode(self._toggle, self._secrets)
+        mode = pick_cursor_mode(self._account, self._secrets)
         return base_metrics(self.provider_id, mode)
 
     async def collect(self) -> ProviderSnapshot:
         """Fetch Cursor usage using the configured auth mode."""
-        mode = pick_cursor_mode(self._toggle, self._secrets)
+        mode = pick_cursor_mode(self._account, self._secrets)
         name = self._display_name()
         if mode == "enterprise":
-            return await CursorEnterpriseCollector(self._secrets, name, self._client).collect(
-                self.provider_id
-            )
-        collector = CursorPersonalCollector(self._secrets, name, self._client)
-        return await collector.collect(self.provider_id)
+            snapshot = await CursorEnterpriseCollector(
+                self._secrets, name, self._client
+            ).collect(self.provider_id)
+        else:
+            collector = CursorPersonalCollector(self._secrets, name, self._client)
+            snapshot = await collector.collect(self.provider_id)
+        snapshot.account_id = self._account_id
+        snapshot.account_label = self._account_label
+        return snapshot
 
     def _display_name(self) -> str:
         if self._account_label:

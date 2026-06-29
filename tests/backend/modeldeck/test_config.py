@@ -12,7 +12,7 @@ def test_validate_example_config():
     root = Path(__file__).resolve().parents[3]
     cfg = validate_config_file(root / "templates" / "modeldeck.example.yaml")
     assert cfg.providers.mock.enabled is False
-    assert cfg.providers.codex.auth_mode == "subscription"
+    assert cfg.providers.codex[0].auth_mode == "subscription"
     assert cfg.mqtt.topic_prefix == "modeldeck"
 
 

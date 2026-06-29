@@ -8,7 +8,7 @@ import sys
 import pytest
 
 from modeldeck.collectors.metrics import base_metrics, effective_metrics
-from modeldeck.config.loader import ProviderToggle
+from modeldeck.config.loader import ProviderAccount, ProviderToggle
 from modeldeck.mqtt.client import SnapshotPublish
 from modeldeck.schemas.snapshot import ProviderSnapshot
 
@@ -41,5 +41,10 @@ def tmp_config_dir(tmp_path, monkeypatch):
 
 
 def no_file_toggle(**kwargs: object) -> ProviderToggle:
-    """Provider toggle that skips local credential file loading."""
+    """Provider toggle that skips local credential file loading (backward compat)."""
     return ProviderToggle.model_validate({"credential_path": "", **kwargs})
+
+
+def no_file_account(id: str = "default", **kwargs: object) -> ProviderAccount:
+    """Provider account that skips local credential file loading."""
+    return ProviderAccount.model_validate({"id": id, "credential_path": "", **kwargs})

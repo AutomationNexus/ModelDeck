@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from modeldeck.config.loader import AppConfig, ProviderSecrets, ProviderToggle, SecretsConfig
+from modeldeck.config.loader import AppConfig, ProviderSecrets, SecretsConfig
 from modeldeck.schemas.snapshot import DEFAULT_METRICS, MetricKind, ProviderSnapshot
 
 
@@ -31,23 +31,32 @@ def build_collectors(
     from modeldeck.collectors.cursor import CursorCollector
     from modeldeck.collectors.mock import MockCollector
 
-    registry: dict[str, type[Collector]] = {
-        "mock": MockCollector,
+    registry: dict[str, type] = {
         "codex": CodexCollector,
         "claude": ClaudeCollector,
         "cursor": CursorCollector,
     }
     collectors: list[Collector] = []
-    provider_flags = config.providers.model_dump()
-    for provider_id, toggle_data in provider_flags.items():
-        if not toggle_data.get("enabled"):
-            continue
-        cls = registry.get(provider_id)
-        if cls is None:
-            continue
-        toggle = ProviderToggle.model_validate(toggle_data)
-        provider_secrets = secrets.providers.get(provider_id, ProviderSecrets())
-        collectors.append(cls(config, provider_secrets, toggle))
+
+    # Mock stays single-account with ProviderToggle pattern (testing only).
+    if config.providers.mock.enabled:
+        mock_secrets = secrets.providers.get("mock", {}).get("default", ProviderSecrets())
+        collectors.append(MockCollector(config, mock_secrets))
+
+    # Real providers iterate their account lists.
+    for provider_id in ("codex", "claude", "cursor"):
+        accounts = getattr(config.providers, provider_id, [])
+        for account in accounts:
+            if not account.enabled:
+                continue
+            cls = registry.get(provider_id)
+            if cls is None:
+                continue
+            acct_secrets = (
+                secrets.providers.get(provider_id, {}).get(account.id, ProviderSecrets())
+            )
+            collectors.append(cls(config, acct_secrets, account, account.id))
+
     return collectors
 
 
