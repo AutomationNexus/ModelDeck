@@ -326,11 +326,11 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
                 </a>
               </div>
               <div className="form-group">
-                <label className="form-label">Code or redirect URL</label>
+                <label className="form-label">Paste the full URL from your browser's address bar</label>
                 <input
                   type="text"
                   value={oauthCode}
-                  placeholder="Paste here…"
+                  placeholder="http://localhost:1455/auth/callback?code=… or https://console.anthropic.com/oauth/code/callback?code=…"
                   onChange={(e) => setOauthCode(e.target.value)}
                   autoComplete="off"
                 />

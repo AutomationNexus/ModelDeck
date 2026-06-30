@@ -98,7 +98,10 @@ CLAUDE_SPEC = ProviderOAuthSpec(
         "user:mcp_servers",
         "user:file_upload",
     ),
-    redirect_uri="https://modeldeck.local/oauth/callback",
+    # Claude Code CLI's registered redirect URI — allow-listed by Anthropic for this
+    # public client. The callback page renders and displays the authorization code
+    # for the user to copy and paste back into the ModelDeck web UI.
+    redirect_uri="https://console.anthropic.com/oauth/code/callback",
     token_encoding="json",
 )
 

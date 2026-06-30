@@ -298,28 +298,81 @@ async def _post_token(
     return payload
 
 
-def extract_code_from_redirect(redirect_url: str) -> str:
-    """Extract the authorization code from a redirect URL or bare code string.
+def extract_code_from_redirect(redirect_url: str) -> str:  # noqa: C901
+    """Extract the authorization code from whatever the user pasted.
 
-    Accepts either the full redirect URL (e.g.
-    ``https://modeldeck.local/oauth/callback?code=abc&state=xyz``
-    or ``http://localhost:1455/auth/callback?code=abc&state=xyz``)
-    or just the bare code string that the user copied from the browser.
+    Designed to be forgiving: accepts any of the following without the user
+    having to understand the OAuth flow:
 
-    Paste-back usage note:
-        For Codex, the redirect URL is ``http://localhost:1455/auth/callback``
-        which won't load on the user's PC when ModelDeck runs on the HA host.
-        The user copies the full URL (or just the ``code`` parameter value)
-        from the browser's address bar before the page fails to load.
+    * Full redirect URL with ``http``/``https`` scheme:
+        ``http://localhost:1455/auth/callback?code=abc&state=xyz``
+        ``https://console.anthropic.com/oauth/code/callback?code=abc``
+    * Code in URL fragment (some providers put params after ``#``):
+        ``https://example.com/callback#code=abc&state=xyz``
+    * Scheme-less URL pasted from the address bar:
+        ``localhost:1455/auth/callback?code=abc&state=xyz``
+    * Bare ``code=VALUE`` param string (user copies just that part):
+        ``code=ac_rpcQfsO0Dgx80xz9zG2an3FCMGl``
+    * Bare authorization code (no prefix, no URL):
+        ``ac_rpcQfsO0Dgx80xz9zG2an3FCMGl``
+
+    Surrounding whitespace, angle-brackets (``<url>``), and straight or
+    curly quotes are stripped before processing.
+
+    Paste-back usage note
+    ---------------------
+    For Codex the redirect goes to ``http://localhost:1455/auth/callback``
+    which is the user's *browser machine* localhost — not the add-on host —
+    so that page fails to load.  The user copies the entire URL from the
+    address bar and pastes it here; this function extracts the ``code=``
+    value automatically.
+
+    For Claude the redirect goes to
+    ``https://console.anthropic.com/oauth/code/callback`` which renders and
+    displays the code.  The user can paste either the full page URL or the
+    code value shown on that page.
     """
-    stripped = redirect_url.strip()
-    if stripped.startswith("http"):
-        parsed = urllib.parse.urlparse(stripped)
-        params = urllib.parse.parse_qs(parsed.query)
-        code = params.get("code", [""])[0]
-        if not code:
-            raise OAuthFlowError(
-                "No 'code' parameter found in redirect URL"
-            )
-        return code
-    return stripped
+    # Strip surrounding whitespace and common wrapping characters.
+    stripped = redirect_url.strip().strip("<>\"'\u2018\u2019\u201c\u201d")
+
+    # --- bare "code=VALUE" param (no URL, no scheme) ---
+    if stripped.lower().startswith("code="):
+        code = stripped[5:].split("&")[0].strip()
+        if code:
+            return code
+        raise OAuthFlowError(
+            "No value found after 'code=' — paste the full URL from your "
+            "browser's address bar."
+        )
+
+    # --- URL-shaped input (with or without scheme) ---
+    # Normalise scheme-less URLs so urlparse can handle them.
+    parse_target = stripped
+    if not stripped.lower().startswith(("http://", "https://")):
+        # Heuristic: contains a slash and a query string → looks like a URL.
+        if "/" in stripped and "?" in stripped:
+            parse_target = "https://" + stripped
+
+    if parse_target.lower().startswith(("http://", "https://")):
+        parsed = urllib.parse.urlparse(parse_target)
+
+        # Check query string first, then fragment (some providers use #code=).
+        for source in (parsed.query, parsed.fragment):
+            params = urllib.parse.parse_qs(source)
+            code = params.get("code", [""])[0].strip()
+            if code:
+                return code
+
+        raise OAuthFlowError(
+            "No 'code' parameter found in the URL. "
+            "Copy the entire address-bar URL from your browser and paste it here."
+        )
+
+    # --- bare code (no URL, no prefix) ---
+    if stripped:
+        return stripped
+
+    raise OAuthFlowError(
+        "Nothing to parse — paste the full URL from your browser's address bar "
+        "or the authorization code shown on the provider's page."
+    )

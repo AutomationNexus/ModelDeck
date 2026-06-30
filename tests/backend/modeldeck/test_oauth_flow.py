@@ -129,15 +129,60 @@ def test_extract_code_from_redirect_bare_code():
 
 def test_extract_code_from_redirect_full_url():
     """A full redirect URL should have its ?code= value extracted."""
-    url = "https://modeldeck.local/oauth/callback?code=xyz&state=s"
+    url = "https://console.anthropic.com/oauth/code/callback?code=xyz&state=s"
     result = extract_code_from_redirect(url)
     assert result == "xyz"
 
 
+def test_extract_code_from_redirect_codex_url():
+    """Codex localhost redirect URL should be parsed correctly."""
+    url = "http://localhost:1455/auth/callback?code=ac_abc123&state=s"
+    result = extract_code_from_redirect(url)
+    assert result == "ac_abc123"
+
+
+def test_extract_code_from_redirect_fragment():
+    """Code in the URL fragment (#code=…) should be extracted."""
+    url = "https://console.anthropic.com/oauth/code/callback#code=frag_code&state=xyz"
+    result = extract_code_from_redirect(url)
+    assert result == "frag_code"
+
+
+def test_extract_code_from_redirect_scheme_less():
+    """Scheme-less URL pasted from address bar should work."""
+    url = "localhost:1455/auth/callback?code=schemeless_code&state=s"
+    result = extract_code_from_redirect(url)
+    assert result == "schemeless_code"
+
+
+def test_extract_code_from_redirect_bare_param():
+    """Bare 'code=VALUE' string (no URL) should extract the value."""
+    result = extract_code_from_redirect("code=ac_rpcQfsO0Dgx80xz9zG2an3FCMGl")
+    assert result == "ac_rpcQfsO0Dgx80xz9zG2an3FCMGl"
+
+
+def test_extract_code_from_redirect_bare_param_with_state():
+    """'code=VALUE&state=…' should extract the value only."""
+    result = extract_code_from_redirect("code=mycode&state=randomstate")
+    assert result == "mycode"
+
+
+def test_extract_code_from_redirect_surrounding_quotes():
+    """Surrounding quotes should be stripped."""
+    result = extract_code_from_redirect('"abc123"')
+    assert result == "abc123"
+
+
+def test_extract_code_from_redirect_surrounding_angle_brackets():
+    """Surrounding angle brackets should be stripped."""
+    result = extract_code_from_redirect("<abc123>")
+    assert result == "abc123"
+
+
 def test_extract_code_from_redirect_missing_code_raises():
-    """A redirect URL without ?code= should raise OAuthFlowError."""
-    url = "https://modeldeck.local/oauth/callback?state=s"
-    with pytest.raises(OAuthFlowError, match="No 'code' parameter"):
+    """A redirect URL without ?code= or #code= should raise OAuthFlowError."""
+    url = "https://console.anthropic.com/oauth/code/callback?state=s"
+    with pytest.raises(OAuthFlowError):
         extract_code_from_redirect(url)
 
 

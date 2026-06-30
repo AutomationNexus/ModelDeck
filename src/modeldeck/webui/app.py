@@ -62,8 +62,9 @@ _PROVIDER_META: dict[str, dict[str, Any]] = {
         # paste_back_note: shown in the OAuth wizard for this provider.
         "oauth_paste_back_note": (
             "Open the authorization URL in your browser and sign in. "
-            "The page at localhost:1455 won't load — copy the entire URL "
-            "(or just the code= value) from your browser's address bar and paste it here."
+            "The page at localhost:1455 will fail to load — that is expected. "
+            "Copy the entire URL from your browser's address bar and paste it below. "
+            "ModelDeck extracts the authorization code automatically."
         ),
         "auth_modes": [
             {
@@ -93,8 +94,10 @@ _PROVIDER_META: dict[str, dict[str, Any]] = {
         "default_mode": "oauth",
         "oauth_paste_back_note": (
             "Open the authorization URL in your browser and sign in to Claude. "
-            "After authorizing, the page at modeldeck.local won't load — "
-            "copy the code= value from your browser's address bar and paste it here."
+            "After authorizing, you will be redirected to console.anthropic.com where "
+            "the authorization code is displayed. Copy the entire URL from your browser's "
+            "address bar (or just the code shown on the page) and paste it below. "
+            "ModelDeck extracts the authorization code automatically."
         ),
         "auth_modes": [
             {
