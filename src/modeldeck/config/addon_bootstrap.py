@@ -152,6 +152,23 @@ def _provider_secrets(options: dict[str, Any], provider_id: str) -> dict[str, st
     return block
 
 
+def _should_seed_default(opts: dict[str, Any], provider_id: str) -> bool:
+    """Return True if the add-on options justify seeding a 'default' account.
+
+    A default account is seeded only when the provider is explicitly enabled
+    OR has at least one credential field set.  On a fresh install with nothing
+    configured all three flags are False and no credentials exist, so fresh
+    installs start with an empty account list (user adds accounts via the web
+    UI with '+ Add account').
+    """
+    if bool(_opt(opts, f"{provider_id}_enabled", False)):
+        return True
+    return any(
+        str(_opt(opts, f"{provider_id}_{field}", "")).strip()
+        for field in _PROVIDER_SECRET_FIELDS.get(provider_id, ())
+    )
+
+
 def build_config_dict(
     options: dict[str, Any],
     existing_config: dict[str, Any] | None = None,
@@ -161,6 +178,11 @@ def build_config_dict(
     If *existing_config* is provided (the current on-disk modeldeck.yaml), any
     provider accounts beyond the add-on ``default`` account are preserved so
     that accounts created via the web UI survive an add-on restart.
+
+    Fresh install behaviour: the add-on Configuration tab no longer has
+    provider credential fields, so on a clean install all providers are
+    disabled and credential-less.  In that case no ``default`` account is
+    seeded — the user adds accounts via the web UI.
     """
     opts = normalize_options(options)
     config: dict[str, Any] = {
@@ -181,26 +203,38 @@ def build_config_dict(
         },
         "providers": {
             "mock": {"enabled": False},
-            "codex": [_provider_account(opts, "codex")],
-            "claude": [_provider_account(opts, "claude")],
-            "cursor": [_provider_account(opts, "cursor")],
+            "codex": (
+                [_provider_account(opts, "codex")]
+                if _should_seed_default(opts, "codex") else []
+            ),
+            "claude": (
+                [_provider_account(opts, "claude")]
+                if _should_seed_default(opts, "claude") else []
+            ),
+            "cursor": (
+                [_provider_account(opts, "cursor")]
+                if _should_seed_default(opts, "cursor") else []
+            ),
         },
     }
 
-    # Merge web-UI accounts: preserve extra accounts (non-default) from existing config.
+    # Merge web-UI accounts: preserve all existing accounts from the on-disk
+    # config so that accounts created (or updated) via the web UI survive an
+    # add-on restart / options re-render.
     if existing_config and isinstance(existing_config.get("providers"), dict):
         for provider_id in ("codex", "claude", "cursor"):
             existing_accounts = existing_config["providers"].get(provider_id, [])
             if not isinstance(existing_accounts, list):
                 continue
-            addon_default = config["providers"][provider_id][0]  # the default account
-            # Keep non-default accounts that were created via the web UI.
+            new_accounts: list[dict[str, Any]] = config["providers"][provider_id]
+            addon_default_ids = {a["id"] for a in new_accounts if isinstance(a, dict)}
+            # Keep existing accounts that are not being replaced by the add-on default.
             extra = [
                 a for a in existing_accounts
-                if isinstance(a, dict) and a.get("id") != "default"
+                if isinstance(a, dict) and a.get("id") not in addon_default_ids
             ]
             if extra:
-                config["providers"][provider_id] = [addon_default, *extra]
+                config["providers"][provider_id] = [*new_accounts, *extra]
 
     return config
 

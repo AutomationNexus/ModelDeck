@@ -97,6 +97,93 @@ def test_build_config_dict_defaults():
     AppConfig.model_validate(config)
 
 
+def test_build_config_dict_fresh_install_no_default_accounts():
+    """Fresh install (nothing enabled, no credentials) should produce zero provider accounts."""
+    config = build_config_dict(NESTED_DEFAULT_OPTIONS)
+    # All providers disabled + no credentials → empty lists, not 'default' stubs.
+    assert config["providers"]["codex"] == []
+    assert config["providers"]["claude"] == []
+    assert config["providers"]["cursor"] == []
+    AppConfig.model_validate(config)
+
+
+def test_build_config_dict_seeds_default_when_enabled():
+    """A provider that is enabled should get a default account seeded."""
+    options = {
+        "mqtt": {"server": "mqtt://core-mosquitto:1883"},
+        "service": {},
+        "codex": {"enabled": True, "auth_mode": "subscription"},
+        "claude": {"enabled": False},
+        "cursor": {"enabled": False},
+    }
+    config = build_config_dict(options)
+    assert len(config["providers"]["codex"]) == 1
+    assert config["providers"]["codex"][0]["id"] == "default"
+    assert config["providers"]["codex"][0]["enabled"] is True
+    assert config["providers"]["claude"] == []
+    assert config["providers"]["cursor"] == []
+    AppConfig.model_validate(config)
+
+
+def test_build_config_dict_seeds_default_when_credentialed():
+    """A provider with credentials set should get a default account seeded even if not enabled."""
+    options = {
+        "mqtt": {"server": "mqtt://core-mosquitto:1883"},
+        "service": {},
+        "codex": {"enabled": False, "access_token": "tok-abc"},
+        "claude": {"enabled": False},
+        "cursor": {"enabled": False},
+    }
+    config = build_config_dict(options)
+    assert len(config["providers"]["codex"]) == 1
+    assert config["providers"]["codex"][0]["id"] == "default"
+    AppConfig.model_validate(config)
+
+
+def test_build_config_dict_preserves_webui_accounts_alongside_default():
+    """Web-UI accounts created via the UI should survive a re-render alongside add-on default."""
+    options = {
+        "mqtt": {"server": "mqtt://core-mosquitto:1883"},
+        "service": {},
+        "codex": {"enabled": True, "auth_mode": "subscription"},
+        "claude": {"enabled": False},
+        "cursor": {"enabled": False},
+    }
+    existing_config = {
+        "providers": {
+            "codex": [
+                {"id": "default", "label": "", "enabled": True, "auth_mode": "subscription"},
+                {"id": "work", "label": "Work account", "enabled": True, "auth_mode": "subscription"},
+            ],
+            "claude": [],
+            "cursor": [],
+        }
+    }
+    config = build_config_dict(options, existing_config=existing_config)
+    codex_ids = [a["id"] for a in config["providers"]["codex"]]
+    assert "default" in codex_ids
+    assert "work" in codex_ids
+    AppConfig.model_validate(config)
+
+
+def test_build_config_dict_preserves_webui_accounts_no_addon_default():
+    """Web-UI accounts survive even when no add-on default would be seeded (fresh options)."""
+    existing_config = {
+        "providers": {
+            "claude": [
+                {"id": "personal", "label": "Personal", "enabled": True, "auth_mode": "oauth"},
+            ],
+            "codex": [],
+            "cursor": [],
+        }
+    }
+    config = build_config_dict(NESTED_DEFAULT_OPTIONS, existing_config=existing_config)
+    # No add-on default for claude (not enabled, no creds), but the web-UI account persists.
+    claude_ids = [a["id"] for a in config["providers"]["claude"]]
+    assert "personal" in claude_ids
+    AppConfig.model_validate(config)
+
+
 def test_parse_mqtt_server_zigbee2mqtt_style():
     """Broker URL should parse like Zigbee2MQTT server field."""
     assert parse_mqtt_server("mqtt://core-mosquitto:1883") == (

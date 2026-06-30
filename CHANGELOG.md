@@ -2,6 +2,36 @@
 
 All notable changes are documented here.
 
+## [Unreleased] - OAuth UX hardening + fresh-install fix
+
+### Fixed
+
+- **Claude OAuth redirect URI rejected**: `CLAUDE_SPEC.redirect_uri` was
+  `https://modeldeck.local/oauth/callback` which is not registered with Anthropic's
+  public Claude client. Changed to `https://console.anthropic.com/oauth/code/callback`
+  (the Claude Code CLI's allow-listed URI). The callback page now renders and displays
+  the authorization code instead of showing "Authorization failed."
+- **Fresh install shows three disabled default accounts**: `build_config_dict` in
+  `addon_bootstrap.py` unconditionally seeded a `default` account for codex/claude/cursor
+  even when disabled with no credentials. The seeding is now conditional — a default
+  account is only created when the provider is enabled or has credentials set. Fresh
+  installs start with zero accounts; accounts are added via the web UI.
+- **Paste-back extractor too strict**: `extract_code_from_redirect` only accepted `http`-
+  prefixed URLs. It now handles: scheme-less address-bar URLs, `#fragment` codes, bare
+  `code=VALUE` param strings, surrounding quotes/angle-brackets, and bare codes. Any
+  full URL copied from the browser address bar is parsed automatically.
+
+### Changed
+
+- **OAuth wizard paste box**: label updated to "Paste the full URL from your browser's
+  address bar" with provider-specific placeholder examples. Accepts a full URL or bare
+  code — ModelDeck extracts the authorization code automatically.
+- **Codex OAuth paste-back note**: clarifies that the `localhost:1455` page failing to
+  load is expected; instructs to copy the entire address-bar URL and paste it in.
+- **Claude OAuth paste-back note**: updated to reflect the new `console.anthropic.com`
+  callback page that displays the code; instructs to copy the full URL or the displayed
+  code and paste it in.
+
 ## [Unreleased] - Codex OAuth fix + OAuth-first wizard
 
 ### Fixed

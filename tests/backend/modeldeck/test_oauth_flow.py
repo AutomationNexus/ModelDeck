@@ -129,16 +129,73 @@ def test_extract_code_from_redirect_bare_code():
 
 def test_extract_code_from_redirect_full_url():
     """A full redirect URL should have its ?code= value extracted."""
-    url = "https://modeldeck.local/oauth/callback?code=xyz&state=s"
+    url = "https://console.anthropic.com/oauth/code/callback?code=xyz&state=s"
     result = extract_code_from_redirect(url)
     assert result == "xyz"
 
 
+def test_extract_code_from_redirect_codex_url():
+    """Codex localhost redirect URL should be parsed correctly."""
+    url = "http://localhost:1455/auth/callback?code=ac_abc123&state=s"
+    result = extract_code_from_redirect(url)
+    assert result == "ac_abc123"
+
+
+def test_extract_code_from_redirect_fragment():
+    """Code in the URL fragment (#code=…) should be extracted."""
+    url = "https://console.anthropic.com/oauth/code/callback#code=frag_code&state=xyz"
+    result = extract_code_from_redirect(url)
+    assert result == "frag_code"
+
+
+def test_extract_code_from_redirect_scheme_less():
+    """Scheme-less URL pasted from address bar should work."""
+    url = "localhost:1455/auth/callback?code=schemeless_code&state=s"
+    result = extract_code_from_redirect(url)
+    assert result == "schemeless_code"
+
+
+def test_extract_code_from_redirect_bare_param():
+    """Bare 'code=VALUE' string (no URL) should extract the value."""
+    result = extract_code_from_redirect("code=ac_rpcQfsO0Dgx80xz9zG2an3FCMGl")
+    assert result == "ac_rpcQfsO0Dgx80xz9zG2an3FCMGl"
+
+
+def test_extract_code_from_redirect_bare_param_with_state():
+    """'code=VALUE&state=…' should extract the value only."""
+    result = extract_code_from_redirect("code=mycode&state=randomstate")
+    assert result == "mycode"
+
+
+def test_extract_code_from_redirect_surrounding_quotes():
+    """Surrounding quotes should be stripped."""
+    result = extract_code_from_redirect('"abc123"')
+    assert result == "abc123"
+
+
+def test_extract_code_from_redirect_surrounding_angle_brackets():
+    """Surrounding angle brackets should be stripped."""
+    result = extract_code_from_redirect("<abc123>")
+    assert result == "abc123"
+
+
 def test_extract_code_from_redirect_missing_code_raises():
-    """A redirect URL without ?code= should raise OAuthFlowError."""
-    url = "https://modeldeck.local/oauth/callback?state=s"
-    with pytest.raises(OAuthFlowError, match="No 'code' parameter"):
+    """A redirect URL without ?code= or #code= should raise OAuthFlowError."""
+    url = "https://console.anthropic.com/oauth/code/callback?state=s"
+    with pytest.raises(OAuthFlowError):
         extract_code_from_redirect(url)
+
+
+def test_extract_code_bare_param_empty_value_raises():
+    """'code=' with no value should raise OAuthFlowError (covers line 343)."""
+    with pytest.raises(OAuthFlowError, match="No value found after"):
+        extract_code_from_redirect("code=")
+
+
+def test_extract_code_empty_string_raises():
+    """Completely empty input should raise OAuthFlowError (covers line 375)."""
+    with pytest.raises(OAuthFlowError, match="Nothing to parse"):
+        extract_code_from_redirect("   ")
 
 
 def test_extract_code_strips_whitespace():
@@ -213,6 +270,35 @@ async def test_exchange_code_network_error_raises_oauth_flow_error():
     client = httpx.AsyncClient(transport=httpx.MockTransport(error_handler))
     with pytest.raises(OAuthFlowError):
         await exchange_code(CLAUDE_SPEC, "abc", generate_verifier(), client=client)
+
+
+@pytest.mark.asyncio
+async def test_exchange_code_codex_form_encoding_no_client(monkeypatch):
+    """Codex exchange without a pre-built client hits the form-encoded internal path (lines 277-278)."""
+    import modeldeck.auth.oauth_flow as _flow_mod
+
+    async def error_handler(request: httpx.Request) -> httpx.Response:
+        # Verify the request used form encoding, then return a valid token response.
+        assert request.headers.get("content-type", "").startswith("application/x-www-form-urlencoded")
+        return httpx.Response(200, json={"access_token": "codex_at"})
+
+    mock_client = httpx.AsyncClient(transport=httpx.MockTransport(error_handler))
+
+    class _MockAsyncClient:
+        def __init__(self, **_kw: object) -> None:
+            pass
+
+        async def __aenter__(self) -> httpx.AsyncClient:
+            return mock_client
+
+        async def __aexit__(self, *_: object) -> None:
+            pass
+
+    monkeypatch.setattr(_flow_mod.httpx, "AsyncClient", _MockAsyncClient)
+    from modeldeck.auth.provider_specs import CODEX_SPEC
+
+    result = await _flow_mod.exchange_code(CODEX_SPEC, "code123", generate_verifier())
+    assert result["access_token"] == "codex_at"
 
 
 # ---------------------------------------------------------------------------

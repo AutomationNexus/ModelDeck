@@ -10,8 +10,9 @@ const PROVIDERS: ProviderMeta[] = [
     default_mode: "subscription",
     oauth_paste_back_note:
       "Open the authorization URL in your browser and sign in. " +
-      "The page at localhost:1455 won't load — copy the entire URL " +
-      "(or just the code= value) from your browser's address bar and paste it here.",
+      "The page at localhost:1455 will fail to load — that is expected. " +
+      "Copy the entire URL from your browser's address bar and paste it below. " +
+      "ModelDeck extracts the authorization code automatically.",
     auth_modes: [
       {
         id: "subscription",
@@ -33,8 +34,10 @@ const PROVIDERS: ProviderMeta[] = [
     default_mode: "oauth",
     oauth_paste_back_note:
       "Open the authorization URL in your browser and sign in to Claude. " +
-      "After authorizing, the page at modeldeck.local won't load — " +
-      "copy the code= value from your browser's address bar and paste it here.",
+      "After authorizing, you will be redirected to console.anthropic.com where " +
+      "the authorization code is displayed. Copy the entire URL from your browser's " +
+      "address bar (or just the code shown on the page) and paste it below. " +
+      "ModelDeck extracts the authorization code automatically.",
     auth_modes: [
       {
         id: "oauth",
@@ -119,9 +122,9 @@ describe("Provider metadata — paste-back notes and warnings", () => {
     expect(meta?.oauth_paste_back_note).toContain("localhost:1455");
   });
 
-  it("Claude has oauth_paste_back_note mentioning modeldeck.local", () => {
+  it("Claude has oauth_paste_back_note mentioning console.anthropic.com", () => {
     const meta = getProviderMeta(PROVIDERS, "claude");
-    expect(meta?.oauth_paste_back_note).toContain("modeldeck.local");
+    expect(meta?.oauth_paste_back_note).toContain("console.anthropic.com");
   });
 
   it("Cursor has no_oauth_note", () => {
