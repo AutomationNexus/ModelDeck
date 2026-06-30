@@ -29,6 +29,15 @@ tmp/
 .DS_Store
 Thumbs.db
 
+# Built Vite dashboard (gitignored — built in Docker/CI; see frontend/README.md)
+src/modeldeck/webui/static/*
+!src/modeldeck/webui/static/.gitkeep
+
+# Vite / Node
+frontend/node_modules/
+frontend/coverage/
+frontend/dist/
+
 # Local operator and AI tool state
 AGENT-HANDOFF.md
 AGENTS.md

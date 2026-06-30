@@ -42,7 +42,7 @@ def _empty_secrets() -> SecretsConfig:
 
 
 def test_paste_token_empty_returns_400(monkeypatch):
-    """Empty token must return 400."""
+    """Empty value must return 400."""
     cfg = _make_minimal_config()
     secrets = _empty_secrets()
     monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, secrets))
@@ -51,13 +51,13 @@ def test_paste_token_empty_returns_400(monkeypatch):
     with TestClient(app) as tc:
         resp = tc.post(
             "/accounts/cursor/default/token",
-            json={"token": "", "field": "access_token"},
+            json={"field": "access_token", "value": ""},
         )
     assert resp.status_code == 400
 
 
 def test_paste_token_whitespace_only_returns_400(monkeypatch):
-    """Whitespace-only token must return 400."""
+    """Whitespace-only value must return 400."""
     cfg = _make_minimal_config()
     secrets = _empty_secrets()
     monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, secrets))
@@ -66,26 +66,26 @@ def test_paste_token_whitespace_only_returns_400(monkeypatch):
     with TestClient(app) as tc:
         resp = tc.post(
             "/accounts/cursor/default/token",
-            json={"token": "   ", "field": "session_token"},
+            json={"field": "session_token", "value": "   "},
         )
     assert resp.status_code == 400
 
 
 def test_paste_token_valid_token_returns_200(tmp_path, monkeypatch):
-    """Valid token with mocked write_account_secrets should return 200."""
+    """Valid credential field+value with mocked write_account_secrets should return 200."""
     cfg = _make_minimal_config()
     secrets = _empty_secrets()
     monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, secrets))
     monkeypatch.setattr("modeldeck.webui.app.write_account_secrets", lambda *a, **kw: True)
     monkeypatch.setattr(
-        "modeldeck.webui.app._ensure_account_in_config", lambda *a, **kw: None
+        "modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None
     )
 
     app = create_app()
     with TestClient(app) as tc:
         resp = tc.post(
             "/accounts/cursor/default/token",
-            json={"token": "eyJtest.token.value", "field": "access_token"},
+            json={"field": "access_token", "value": "eyJtest.token.value"},
         )
     assert resp.status_code == 200
 
@@ -100,7 +100,7 @@ def test_paste_token_unknown_field_returns_400(monkeypatch):
     with TestClient(app) as tc:
         resp = tc.post(
             "/accounts/cursor/default/token",
-            json={"token": "sometoken", "field": "bad_field_name"},
+            json={"field": "bad_field_name", "value": "sometoken"},
         )
     assert resp.status_code == 400
 

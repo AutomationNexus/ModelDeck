@@ -43,6 +43,9 @@ modeldeck-service = "modeldeck.service.runner:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"modeldeck.webui" = ["static/index.html", "static/assets/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
@@ -50,7 +53,9 @@ addopts = "-q -m 'not integration'"
 asyncio_mode = "auto"
 markers = [
   "integration: tests requiring Mosquitto or external services",
+  "playwright: browser end-to-end tests (run tests/e2e_frontend explicitly)",
 ]
+norecursedirs = ["tests/e2e_frontend"]
 
 [tool.coverage.run]
 source = ["src/modeldeck"]

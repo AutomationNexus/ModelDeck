@@ -16,10 +16,12 @@ No secret values are returned in API responses.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from pathlib import Path
 from typing import Any
 
+import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -34,10 +36,10 @@ from modeldeck.auth.oauth_flow import (
     generate_verifier,
 )
 from modeldeck.auth.provider_specs import get_spec, supported_oauth_providers
-from modeldeck.cli.login_cmd import _ensure_account_in_config
 from modeldeck.config.loader import ProviderAccount, load_config, slugify
 from modeldeck.config.secrets_writer import write_account_secrets
 from modeldeck.core.logging import get_logger
+from modeldeck.core.paths import config_path
 
 logger = get_logger(__name__)
 
@@ -47,6 +49,81 @@ _OAUTH_SESSIONS: dict[str, dict[str, Any]] = {}
 _SESSION_TTL = 300  # seconds
 
 _PROVIDERS = ("codex", "claude", "cursor")
+
+# Per-provider auth modes and their required credential fields.
+# Used by /providers endpoint so the UI renders the right inputs per mode.
+_PROVIDER_META: dict[str, dict[str, Any]] = {
+    "codex": {
+        "name": "OpenAI Codex",
+        "oauth": True,
+        "auth_modes": [
+            {
+                "id": "subscription",
+                "label": "Subscription (ChatGPT Plus/Pro)",
+                "fields": [
+                    {"id": "access_token", "label": "Access token", "type": "password", "hint": "eyJ… from ~/.codex/auth.json"},
+                    {"id": "refresh_token", "label": "Refresh token", "type": "password", "hint": "rt_… from ~/.codex/auth.json"},
+                    {"id": "account_id", "label": "Account ID", "type": "text", "hint": "user-… from ~/.codex/auth.json"},
+                ],
+                "oauth_capable": True,
+            },
+            {
+                "id": "api",
+                "label": "API billing (sk-admin key)",
+                "fields": [
+                    {"id": "api_key", "label": "Organization Admin API key", "type": "password", "hint": "sk-admin-…"},
+                ],
+                "oauth_capable": False,
+            },
+        ],
+    },
+    "claude": {
+        "name": "Claude",
+        "oauth": True,
+        "auth_modes": [
+            {
+                "id": "oauth",
+                "label": "OAuth (Claude Code)",
+                "fields": [],
+                "oauth_capable": True,
+            },
+            {
+                "id": "cookie",
+                "label": "Cookie (claude.ai Pro/Max web)",
+                "fields": [
+                    {"id": "session_token", "label": "sessionKey cookie", "type": "password", "hint": "sk-ant-sid01-…"},
+                    {"id": "org_id", "label": "Organization ID", "type": "text", "hint": "org_…"},
+                    {"id": "cf_clearance", "label": "cf_clearance cookie (if 403)", "type": "password", "hint": "optional"},
+                    {"id": "device_id", "label": "Device ID cookie (if 403)", "type": "text", "hint": "optional"},
+                ],
+                "oauth_capable": False,
+            },
+        ],
+    },
+    "cursor": {
+        "name": "Cursor",
+        "oauth": False,
+        "auth_modes": [
+            {
+                "id": "personal",
+                "label": "Personal (Pro/Ultra)",
+                "fields": [
+                    {"id": "session_token", "label": "WorkosCursorSessionToken", "type": "password", "hint": "From cursor.com/dashboard/usage cookies"},
+                    {"id": "access_token", "label": "App JWT (alternative)", "type": "password", "hint": "eyJ… from Cursor state.vscdb"},
+                ],
+                "oauth_capable": False,
+            },
+            {
+                "id": "enterprise",
+                "label": "Enterprise / Team",
+                "fields": [
+                    {"id": "admin_api_key", "label": "Team Admin API key", "type": "password", "hint": "crsr_…"},
+                ],
+                "oauth_capable": False,
+            },
+        ],
+    },
+}
 
 
 def _prune_sessions() -> None:
@@ -81,6 +158,51 @@ def _load_accounts() -> list[dict[str, Any]]:
     return result
 
 
+def upsert_account_in_config(
+    provider: str,
+    account_id: str,
+    label: str,
+    *,
+    auth_mode: str,
+    enabled: bool,
+) -> None:
+    """Add or update an account in modeldeck.yaml.
+
+    Unlike the old append-only helper, this updates ``enabled``, ``auth_mode``,
+    and ``label`` when an account with ``account_id`` already exists.
+    """
+    path = config_path()
+    if not path.exists():
+        return
+
+    raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    providers = raw.setdefault("providers", {})
+    accounts: list[dict[str, Any]] = providers.get(provider, [])
+    if not isinstance(accounts, list):
+        accounts = []
+
+    existing_idx = next(
+        (i for i, a in enumerate(accounts) if isinstance(a, dict) and a.get("id") == account_id),
+        None,
+    )
+    if existing_idx is not None:
+        accounts[existing_idx]["enabled"] = enabled
+        accounts[existing_idx]["auth_mode"] = auth_mode
+        if label:
+            accounts[existing_idx]["label"] = label
+    else:
+        accounts.append({
+            "id": account_id,
+            "label": label,
+            "enabled": enabled,
+            "auth_mode": auth_mode,
+        })
+
+    providers[provider] = accounts
+    path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    logger.info("Upserted account %s/%s (enabled=%s)", provider, account_id, enabled)
+
+
 # ---------------------------------------------------------------------------
 # Request/response models
 # ---------------------------------------------------------------------------
@@ -111,10 +233,10 @@ class OAuthCompleteRequest(BaseModel):
 
 
 class PasteTokenRequest(BaseModel):
-    """Paste a token or API key for Cursor or API-key modes."""
+    """Paste a credential field for a provider account."""
 
-    token: str
-    field: str = "access_token"  # access_token | session_token | api_key
+    field: str  # explicit field name; no prefix guessing
+    value: str
 
 
 class AccountResponse(BaseModel):
@@ -137,12 +259,21 @@ def create_app() -> FastAPI:
         title="ModelDeck",
         description="AI quota monitor — account management UI",
         version="0.1.0",
-        docs_url=None,  # disable Swagger UI in production
+        docs_url=None,
         redoc_url=None,
     )
 
-    static_dir = Path(__file__).parent / "static"
+    # Allow CI / tests to override the static dir via env var so path
+    # resolution is independent of editable-install layout.
+    _static_env = os.environ.get("MODELDECK_STATIC_DIR")
+    static_dir = Path(_static_env) if _static_env else Path(__file__).parent / "static"
     if static_dir.exists():
+        # Mount /static for legacy references and /assets for Vite-built bundles
+        # (Vite base:"./" makes asset URLs relative, so ./assets/x.js from page
+        # at / becomes GET /assets/x.js — serve assets dir at /assets directly).
+        assets_dir = static_dir / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     # -----------------------------------------------------------------------
@@ -167,35 +298,9 @@ def create_app() -> FastAPI:
         return _load_accounts()
 
     # -----------------------------------------------------------------------
-    # POST /accounts — create a new account entry (config only, no token yet)
-    # -----------------------------------------------------------------------
-
-    @app.post("/accounts", response_model=AccountResponse, status_code=201)
-    async def create_account(body: CreateAccountRequest) -> dict[str, Any]:
-        """Create a new account in modeldeck.yaml."""
-        if body.provider not in _PROVIDERS:
-            raise HTTPException(status_code=400, detail=f"Unknown provider: {body.provider}")
-        try:
-            config, _ = load_config()
-            existing = getattr(config.providers, body.provider, [])
-            existing_ids = {a.id for a in existing if isinstance(a, ProviderAccount)}
-        except Exception:
-            existing_ids = set()
-
-        account_id = slugify(body.label or body.provider, existing_ids)
-        _ensure_account_in_config(
-            body.provider, account_id, body.label, auth_mode=body.auth_mode, enabled=False
-        )
-        return {
-            "provider": body.provider,
-            "id": account_id,
-            "label": body.label,
-            "enabled": False,
-            "auth_mode": body.auth_mode,
-        }
-
-    # -----------------------------------------------------------------------
     # POST /accounts/{provider}/{account_id}/oauth/start
+    # (Single-wizard: caller selects provider+label+mode first, then starts
+    # OAuth; account is written to config only on successful credential step.)
     # -----------------------------------------------------------------------
 
     @app.post("/accounts/{provider}/{account_id}/oauth/start",
@@ -217,7 +322,6 @@ def create_app() -> FastAPI:
         state = generate_state()
         url = build_authorize_url(spec, verifier, state)
 
-        # Load label from config.
         label = account_id
         try:
             config, _ = load_config()
@@ -229,7 +333,7 @@ def create_app() -> FastAPI:
         except Exception:
             pass
 
-        session_key = generate_state()  # random key to identify this flow
+        session_key = generate_state()
         _OAUTH_SESSIONS[session_key] = {
             "verifier": verifier,
             "state": state,
@@ -248,13 +352,14 @@ def create_app() -> FastAPI:
 
     # -----------------------------------------------------------------------
     # POST /accounts/{provider}/{account_id}/oauth/complete
+    # On success: upsert account as enabled with auth_mode=oauth.
     # -----------------------------------------------------------------------
 
     @app.post("/accounts/{provider}/{account_id}/oauth/complete")
     async def oauth_complete(
         provider: str, account_id: str, body: OAuthCompleteRequest
     ) -> JSONResponse:
-        """Complete OAuth: exchange pasted code for tokens and save."""
+        """Complete OAuth: exchange pasted code for tokens, save, enable account."""
         _prune_sessions()
         session = _OAUTH_SESSIONS.pop(body.session_key, None)
         if session is None:
@@ -281,29 +386,77 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=502, detail="Token exchange returned no tokens.")
 
         write_account_secrets(provider, account_id, fields)
-        _ensure_account_in_config(
+        # Upsert: create or enable existing account with oauth mode.
+        upsert_account_in_config(
             provider, account_id, session["label"], auth_mode="oauth", enabled=True
         )
         logger.info("OAuth complete for %s/%s", provider, account_id)
         return JSONResponse({"status": "ok", "account_id": account_id, "provider": provider})
 
     # -----------------------------------------------------------------------
-    # POST /accounts/{provider}/{account_id}/token — paste-token (Cursor, api)
+    # POST /accounts/{provider}/{account_id}/token — paste credential fields
+    # On success: upsert account as enabled.
     # -----------------------------------------------------------------------
 
     @app.post("/accounts/{provider}/{account_id}/token")
     async def paste_token(
         provider: str, account_id: str, body: PasteTokenRequest
     ) -> JSONResponse:
-        """Save a pasted token or API key for an account."""
-        if body.field not in ("access_token", "session_token", "api_key", "refresh_token"):
+        """Save a pasted credential field for an account and enable it."""
+        valid_fields = {
+            "access_token", "session_token", "api_key", "refresh_token",
+            "account_id", "org_id", "cf_clearance", "device_id", "admin_api_key",
+        }
+        if body.field not in valid_fields:
             raise HTTPException(status_code=400, detail=f"Unknown field: {body.field}")
-        if not body.token.strip():
-            raise HTTPException(status_code=400, detail="Token must not be empty.")
+        if not body.value.strip():
+            raise HTTPException(status_code=400, detail="Value must not be empty.")
 
-        write_account_secrets(provider, account_id, {body.field: body.token.strip()})
-        _ensure_account_in_config(provider, account_id, account_id, auth_mode="auto", enabled=True)
+        write_account_secrets(provider, account_id, {body.field: body.value.strip()})
+
+        # Resolve auth_mode from existing config or default.
+        auth_mode = "auto"
+        try:
+            config, _ = load_config()
+            accts = getattr(config.providers, provider, [])
+            for a in accts:
+                if isinstance(a, ProviderAccount) and a.id == account_id:
+                    auth_mode = a.auth_mode
+                    break
+        except Exception:
+            pass
+
+        # Upsert: create (with account_id as label) or enable existing account.
+        upsert_account_in_config(provider, account_id, account_id, auth_mode=auth_mode, enabled=True)
         return JSONResponse({"status": "ok"})
+
+    # -----------------------------------------------------------------------
+    # POST /accounts — wizard: register label+mode, return account_id.
+    # Credentials are saved by /token or /oauth/complete; account is NOT
+    # written to config until credential step succeeds.
+    # -----------------------------------------------------------------------
+
+    @app.post("/accounts", response_model=AccountResponse, status_code=201)
+    async def create_account(body: CreateAccountRequest) -> dict[str, Any]:
+        """Reserve an account_id for the wizard flow (config written on credential step)."""
+        if body.provider not in _PROVIDERS:
+            raise HTTPException(status_code=400, detail=f"Unknown provider: {body.provider}")
+        try:
+            config, _ = load_config()
+            existing = getattr(config.providers, body.provider, [])
+            existing_ids = {a.id for a in existing if isinstance(a, ProviderAccount)}
+        except Exception:
+            existing_ids = set()
+
+        account_id = slugify(body.label or body.provider, existing_ids)
+        # Return the reserved id; config is written only after credentials are confirmed.
+        return {
+            "provider": body.provider,
+            "id": account_id,
+            "label": body.label,
+            "enabled": False,
+            "auth_mode": body.auth_mode,
+        }
 
     # -----------------------------------------------------------------------
     # POST /accounts/{provider}/{account_id}/verify
@@ -373,9 +526,7 @@ def create_app() -> FastAPI:
     @app.delete("/accounts/{provider}/{account_id}")
     async def delete_account(provider: str, account_id: str) -> JSONResponse:
         """Remove account from config and secrets."""
-        import yaml
-
-        from modeldeck.core.paths import config_path, secrets_path
+        from modeldeck.core.paths import secrets_path
 
         cfg_path = config_path()
         if cfg_path.exists():
@@ -412,10 +563,6 @@ def create_app() -> FastAPI:
         provider: str, account_id: str, request: Request
     ) -> JSONResponse:
         """Enable or disable an account."""
-        import yaml
-
-        from modeldeck.core.paths import config_path
-
         body = await request.json()
         enabled = body.get("enabled")
         if enabled is None:
@@ -439,40 +586,19 @@ def create_app() -> FastAPI:
         return JSONResponse({"status": "ok", "enabled": bool(enabled)})
 
     # -----------------------------------------------------------------------
-    # GET /providers — list OAuth-capable providers
+    # GET /providers — provider metadata + per-mode credential field maps
     # -----------------------------------------------------------------------
 
     @app.get("/providers")
     async def list_providers() -> JSONResponse:
-        """Return provider metadata for the UI."""
-        return JSONResponse({
-            "providers": [
-                {
-                    "id": "claude",
-                    "name": "Claude",
-                    "oauth": "claude" in supported_oauth_providers(),
-                    "auth_modes": ["oauth", "cookie"],
-                },
-                {
-                    "id": "codex",
-                    "name": "OpenAI Codex",
-                    "oauth": "codex" in supported_oauth_providers(),
-                    "auth_modes": ["subscription", "api"],
-                },
-                {
-                    "id": "cursor",
-                    "name": "Cursor",
-                    "oauth": False,
-                    "auth_modes": ["personal", "enterprise"],
-                },
-            ]
-        })
+        """Return provider metadata including per-mode required credential fields."""
+        return JSONResponse({"providers": list(_PROVIDER_META.values())})
 
     return app
 
 
 # ---------------------------------------------------------------------------
-# Fallback HTML (when static/index.html not present)
+# Fallback HTML (served when static/index.html not present — dev without build)
 # ---------------------------------------------------------------------------
 
 def _fallback_html() -> str:
@@ -483,140 +609,15 @@ def _fallback_html() -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ModelDeck</title>
 <style>
-  body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; }
-  h1 { color: #1a56db; }
-  .account { border: 1px solid #ddd; border-radius: 6px; padding: 1rem; margin: 0.5rem 0; }
-  .ok { color: #16a34a; } .error { color: #dc2626; } .disabled { color: #6b7280; }
-  button { background: #1a56db; color: white; border: none; padding: 0.4rem 1rem;
-           border-radius: 4px; cursor: pointer; }
-  button.danger { background: #dc2626; }
-  input { border: 1px solid #ddd; padding: 0.3rem 0.5rem; border-radius: 4px; width: 100%; }
-  .form { margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
-  .wizard { background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 6px; padding: 1rem; }
-  pre { background: #f5f5f5; padding: 0.5rem; border-radius: 4px; overflow-x: auto; }
+  body{font-family:sans-serif;max-width:600px;margin:4rem auto;padding:1rem;background:#111;color:#eee;}
+  h1{color:#38bdf8;}
+  p{color:#94a3b8;}
+  code{background:#1e293b;padding:2px 6px;border-radius:4px;font-size:.9em;}
 </style>
 </head>
 <body>
 <h1>ModelDeck</h1>
-<p>AI usage quota bridge for Home Assistant.</p>
-<div id="app"><p>Loading accounts...</p></div>
-<h2>Add Account</h2>
-<div class="form">
-  <label>Provider:
-    <select id="add-provider">
-      <option value="claude">Claude</option>
-      <option value="codex">OpenAI Codex</option>
-      <option value="cursor">Cursor</option>
-    </select>
-  </label>
-  <label>Label: <input id="add-label" placeholder="e.g. Personal Claude"></label>
-  <label>Auth mode:
-    <select id="add-auth-mode">
-      <option value="auto">auto</option>
-      <option value="oauth">oauth</option>
-      <option value="cookie">cookie</option>
-      <option value="subscription">subscription</option>
-      <option value="api">api</option>
-      <option value="personal">personal</option>
-      <option value="enterprise">enterprise</option>
-    </select>
-  </label>
-  <button onclick="addAccount()">Add Account</button>
-</div>
-<div id="wizard-area"></div>
-<script>
-const api = (method, path, body) => fetch(path, {
-  method, headers: {'Content-Type': 'application/json'},
-  body: body ? JSON.stringify(body) : undefined,
-}).then(r => r.json());
-
-async function load() {
-  const accounts = await api('GET', '/accounts');
-  const el = document.getElementById('app');
-  if (!accounts.length) { el.innerHTML = '<p>No accounts configured.</p>'; return; }
-  el.innerHTML = accounts.map(a => `
-    <div class="account">
-      <b>${a.provider}/${a.id}</b> — ${a.label || '(no label)'}
-      <span class="${a.enabled ? 'ok' : 'disabled'}"> [${a.enabled ? 'enabled' : 'disabled'}]</span>
-      <span> auth_mode: ${a.auth_mode}</span><br>
-      <button onclick="verify('${a.provider}','${a.id}')">Verify</button>
-      ${supportsOAuth(a.provider, a.auth_mode) ?
-        `<button onclick="startOAuth('${a.provider}','${a.id}')">Re-login (OAuth)</button>` : ''}
-      <button onclick="pasteToken('${a.provider}','${a.id}')">Paste Token</button>
-      <button onclick="toggleAccount('${a.provider}','${a.id}',${!a.enabled})">${a.enabled ? 'Disable' : 'Enable'}</button>
-      <button class="danger" onclick="deleteAccount('${a.provider}','${a.id}')">Delete</button>
-      <span id="status-${a.provider}-${a.id}"></span>
-    </div>`).join('');
-}
-
-function supportsOAuth(provider, mode) {
-  return (provider === 'claude' || provider === 'codex') &&
-         (mode === 'oauth' || mode === 'subscription' || mode === 'auto');
-}
-
-async function addAccount() {
-  const provider = document.getElementById('add-provider').value;
-  const label = document.getElementById('add-label').value;
-  const auth_mode = document.getElementById('add-auth-mode').value;
-  const acct = await api('POST', '/accounts', {provider, label, auth_mode});
-  if (supportsOAuth(provider, auth_mode)) {
-    await startOAuth(provider, acct.id);
-  }
-  load();
-}
-
-async function startOAuth(provider, accountId) {
-  const res = await api('POST', `/accounts/${provider}/${accountId}/oauth/start`);
-  const area = document.getElementById('wizard-area');
-  area.innerHTML = `<div class="wizard">
-    <h3>Login: ${provider}/${accountId}</h3>
-    <p>1. Open this URL in your browser and log in:</p>
-    <pre>${res.authorize_url}</pre>
-    <p>2. After authorization, paste the code or redirect URL:</p>
-    <input id="oauth-code" placeholder="Paste code or redirect URL">
-    <button onclick="completeOAuth('${provider}','${accountId}','${res.session_key}')">Complete Login</button>
-  </div>`;
-}
-
-async function completeOAuth(provider, accountId, sessionKey) {
-  const code = document.getElementById('oauth-code').value;
-  const res = await api('POST', `/accounts/${provider}/${accountId}/oauth/complete`,
-    {session_key: sessionKey, code_or_redirect: code});
-  document.getElementById('wizard-area').innerHTML =
-    `<p class="${res.status === 'ok' ? 'ok' : 'error'}">
-      ${res.status === 'ok' ? 'Login successful!' : 'Error: ' + JSON.stringify(res)}</p>`;
-  load();
-}
-
-async function pasteToken(provider, accountId) {
-  const token = prompt('Paste JWT, session cookie, or API key:');
-  if (!token) return;
-  const field = token.startsWith('sk-admin') ? 'api_key' :
-                token.startsWith('eyJ') ? 'access_token' : 'session_token';
-  await api('POST', `/accounts/${provider}/${accountId}/token`, {token, field});
-  load();
-}
-
-async function verify(provider, accountId) {
-  const el = document.getElementById(`status-${provider}-${accountId}`);
-  el.textContent = ' checking...';
-  const res = await api('POST', `/accounts/${provider}/${accountId}/verify`);
-  el.textContent = ` → ${res.status}`;
-  el.className = res.status === 'ok' ? 'ok' : 'error';
-}
-
-async function toggleAccount(provider, accountId, enabled) {
-  await api('PATCH', `/accounts/${provider}/${accountId}`, {enabled});
-  load();
-}
-
-async function deleteAccount(provider, accountId) {
-  if (!confirm(`Delete ${provider}/${accountId}?`)) return;
-  await api('DELETE', `/accounts/${provider}/${accountId}`);
-  load();
-}
-
-load();
-</script>
+<p>The management UI requires a production build.</p>
+<p>Run <code>cd frontend &amp;&amp; npm ci &amp;&amp; npm run build</code> then restart the server.</p>
 </body>
 </html>"""

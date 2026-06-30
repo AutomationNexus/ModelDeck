@@ -99,20 +99,20 @@ def test_providers_returns_200(client):
 
 def test_providers_contains_claude(client):
     data = client.get("/providers").json()
-    ids = [p["id"] for p in data["providers"]]
-    assert "claude" in ids
+    names = [p["name"] for p in data["providers"]]
+    assert "Claude" in names
 
 
 def test_providers_contains_codex(client):
     data = client.get("/providers").json()
-    ids = [p["id"] for p in data["providers"]]
-    assert "codex" in ids
+    names = [p["name"] for p in data["providers"]]
+    assert "OpenAI Codex" in names
 
 
 def test_providers_contains_cursor(client):
     data = client.get("/providers").json()
-    ids = [p["id"] for p in data["providers"]]
-    assert "cursor" in ids
+    names = [p["name"] for p in data["providers"]]
+    assert "Cursor" in names
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ def test_create_account_known_provider_returns_201(monkeypatch):
     secrets = _empty_secrets()
     monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, secrets))
     monkeypatch.setattr(
-        "modeldeck.webui.app._ensure_account_in_config", lambda *a, **kw: None
+        "modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None
     )
 
     app = create_app()
@@ -170,7 +170,7 @@ def test_create_account_returns_account_id_and_provider(monkeypatch):
     secrets = _empty_secrets()
     monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, secrets))
     monkeypatch.setattr(
-        "modeldeck.webui.app._ensure_account_in_config", lambda *a, **kw: None
+        "modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None
     )
 
     app = create_app()
@@ -205,7 +205,7 @@ def test_create_account_response_no_secrets(monkeypatch):
     secrets = _empty_secrets()
     monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, secrets))
     monkeypatch.setattr(
-        "modeldeck.webui.app._ensure_account_in_config", lambda *a, **kw: None
+        "modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None
     )
 
     app = create_app()

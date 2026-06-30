@@ -140,7 +140,7 @@ def webui_client(monkeypatch, _minimal_config_with_claude, tmp_path):
 
     monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, sec))
     monkeypatch.setattr("modeldeck.webui.app.write_account_secrets", lambda *a, **kw: True)
-    monkeypatch.setattr("modeldeck.webui.app._ensure_account_in_config", lambda *a, **kw: None)
+    monkeypatch.setattr("modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None)
     monkeypatch.setenv("MODELDECK_CONFIG_DIR", str(tmp_path))
     (tmp_path / "modeldeck.yaml").write_text(
         "providers:\n  claude:\n    - id: default\n      label: Test\n"
@@ -162,13 +162,13 @@ def test_webui_get_root(webui_client):
 
 
 def test_webui_get_providers(webui_client):
-    """GET /providers returns provider list."""
+    """GET /providers returns provider list with name and auth_modes."""
     resp = webui_client.get("/providers")
     assert resp.status_code == 200
     data = resp.json()
-    ids = [p["id"] for p in data["providers"]]
-    assert "claude" in ids
-    assert "cursor" in ids
+    names = [p["name"] for p in data["providers"]]
+    assert "Claude" in names
+    assert "Cursor" in names
 
 
 def test_webui_list_accounts(webui_client):
@@ -256,10 +256,10 @@ def test_webui_oauth_complete_exchange_error(webui_client, monkeypatch):
 
 
 def test_webui_paste_token_empty(webui_client):
-    """POST /token with empty token returns 400."""
+    """POST /token with empty value returns 400."""
     resp = webui_client.post(
         "/accounts/cursor/default/token",
-        json={"token": "", "field": "access_token"},
+        json={"field": "access_token", "value": ""},
     )
     assert resp.status_code == 400
 
@@ -268,16 +268,16 @@ def test_webui_paste_token_bad_field(webui_client):
     """POST /token with invalid field returns 400."""
     resp = webui_client.post(
         "/accounts/cursor/default/token",
-        json={"token": "abc", "field": "bad_field"},
+        json={"field": "bad_field", "value": "abc"},
     )
     assert resp.status_code == 400
 
 
 def test_webui_paste_token_success(webui_client):
-    """POST /token with valid data returns 200."""
+    """POST /token with valid field+value returns 200."""
     resp = webui_client.post(
         "/accounts/cursor/default/token",
-        json={"token": "eyJtest", "field": "access_token"},
+        json={"field": "access_token", "value": "eyJtest"},
     )
     assert resp.status_code == 200
 
