@@ -18,6 +18,7 @@ from modeldeck.mqtt.client import MqttBridge, SnapshotPublish
 from modeldeck.service.runner import run_service
 from modeldeck.service.scheduler import CollectionRunner
 from modeldeck.service.state_cache import StateCache
+from modeldeck.webui.server import register_webui_command
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -57,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
 
     register_credentials_commands(sub)
     register_login_commands(sub)
+    register_webui_command(sub)
 
     args = parser.parse_args(argv)
     return int(args.func(args))
