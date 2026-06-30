@@ -2,6 +2,43 @@
 
 All notable changes are documented here.
 
+## [Unreleased] - Codex OAuth fix + OAuth-first wizard
+
+### Fixed
+
+- **Codex OAuth broke with NextAuth error**: `CODEX_SPEC` pointed to wrong endpoints
+  (`chatgpt.com/api/auth/authorize` — a NextAuth route that rejects GET). Now uses
+  the real Codex CLI OAuth server: `https://auth.openai.com/oauth/authorize` and
+  `https://auth.openai.com/oauth/token`.
+- **Codex token exchange failed silently**: the shared `_post_token` always sent JSON;
+  Codex's token endpoint requires `application/x-www-form-urlencoded`. Per-provider
+  `token_encoding` field added to `ProviderOAuthSpec`; Codex uses `"form"`, Claude `"json"`.
+- **Codex account_id not saved**: the collector sends `ChatGPT-Account-Id` header using
+  `secrets.account_id`. After OAuth exchange, `account_id` is now extracted from the
+  `id_token` JWT claims (`https://api.openai.com/auth.chatgpt_account_id`) and persisted.
+- **Codex OAuth set wrong auth_mode**: `oauth_complete` now sets `auth_mode=subscription`
+  for Codex (the collector's mode for OAuth-backed tokens) and `auth_mode=oauth` for Claude.
+
+### Added
+
+- **`/accounts/{provider}/{account_id}/switch-oauth` endpoint**: one-click action that
+  updates an existing account's `auth_mode` to the OAuth mode then returns the OAuth start
+  payload (authorize URL + session key), so the UI opens the wizard in one step.
+- **"Switch to OAuth" card action**: shown on Claude/Codex accounts not already in OAuth
+  mode, allowing upgrade from cookie/api/paste-back to independent OAuth session.
+- **OAuth-first wizard defaults**: wizard pre-selects `subscription` for Codex and `oauth`
+  for Claude (both OAuth-capable and independent-session modes).
+- **Paste-back instructions per provider**: OAuth step shows provider-specific note
+  explaining that the redirect page won't load and how to copy the `code=` value from
+  the address bar (`localhost:1455` for Codex, `modeldeck.local` for Claude).
+- **Cursor no-OAuth warning**: account card and wizard show "Cursor has no public OAuth
+  flow — this token shares your browser/app session."
+- **`extra_authorize_params` on `ProviderOAuthSpec`**: Codex adds `originator`,
+  `codex_cli_simplified_flow`, `id_token_add_organizations` to the authorize URL,
+  matching the Codex CLI's simplified login flow. Env-overridable per param.
+- **`decode_id_token_claims` / `extract_codex_account_id`** helpers in `oauth_flow.py`.
+- 39 new Python tests; 16 new Vitest tests; coverage **97.21%**.
+
 ## [Unreleased] - modern web UI + functional fixes
 
 ### Breaking
