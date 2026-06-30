@@ -2,6 +2,38 @@
 
 All notable changes are documented here.
 
+## [Unreleased] - Claude OAuth fix, account rename, live reload, entity viewer
+
+### Fixed
+
+- **Claude OAuth "Token endpoint returned 400"**: Claude's token endpoint requires
+  the OAuth `state` parameter in the exchange body, and returns the authorization code
+  in a bare `CODE#STATE` format. `extract_code_from_redirect` sent the full `CODE#STATE`
+  string as the code, causing the 400. Fixed by adding `parse_code_and_state()` which
+  correctly splits the hash and threads `state` through `exchange_code` only for providers
+  that declare `token_exchange_includes_state=True` (`CLAUDE_SPEC`). Codex unchanged.
+
+### Added
+
+- **Account rename**: `POST /accounts/{provider}/{id}/rename` with body
+  `{label, update_entity_id}`. Toggle off (default/recommended): only the label
+  updates; entity_id/`unique_id` stay stable and HA history + automations are
+  preserved. Toggle on (Z2M-style): slug is regenerated from the new label and secrets
+  are migrated — HA history referencing the old entity_id breaks (modal warns).
+  `move_account_secrets()` helper added to `secrets_writer.py`.
+- **Rename modal in web UI**: "Rename" button on each account card opens a modal with
+  a pre-filled label field and an "Update Home Assistant entity ID" toggle (default off)
+  with a clear tradeoff explanation.
+- **Live config reload**: The service now detects changes to `modeldeck.yaml` /
+  `secrets.yaml` every ~5s (via `ConfigWatcher` mtime). On change it rebuilds collectors,
+  retires removed/disabled accounts via MQTT, and forces discovery republish — no add-on
+  restart needed. Add/delete/toggle/rename all apply within one reload cycle.
+- **Per-account entity ID and MQTT topic viewer**: "View entities" button on each
+  account card opens a modal popup listing `entity_id`, `state_topic`, and
+  `discovery_topic` for every candidate metric, plus `device_id` and
+  `availability_topic`. All values are copyable with one click.
+  Backend: `GET /accounts/{provider}/{id}/entities`.
+
 ## [Unreleased] - OAuth UX hardening + fresh-install fix
 
 ### Fixed

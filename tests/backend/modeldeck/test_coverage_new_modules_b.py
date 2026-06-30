@@ -65,10 +65,10 @@ async def test_run_oauth_login_bad_code(monkeypatch):
 
     monkeypatch.setattr("builtins.input", lambda _: "https://no-code-here.local/")
 
-    def bad_extract(x):
+    def bad_parse(x):
         raise OAuthFlowError("no code")
 
-    monkeypatch.setattr("modeldeck.cli.login_cmd.extract_code_from_redirect", bad_extract)
+    monkeypatch.setattr("modeldeck.cli.login_cmd.parse_code_and_state", bad_parse)
     result = await _run_oauth_login("claude", "Test", "test")
     assert result == 1
 
@@ -80,7 +80,7 @@ async def test_run_oauth_login_exchange_fails(monkeypatch):
     from modeldeck.cli.login_cmd import _run_oauth_login
 
     monkeypatch.setattr("builtins.input", lambda _: "abc123")
-    monkeypatch.setattr("modeldeck.cli.login_cmd.extract_code_from_redirect", lambda x: x)
+    monkeypatch.setattr("modeldeck.cli.login_cmd.parse_code_and_state", lambda x: (x, None))
 
     async def bad_exchange(*a, **kw):
         raise OAuthFlowError("bad exchange")
@@ -96,7 +96,7 @@ async def test_run_oauth_login_no_tokens_in_response(monkeypatch):
     from modeldeck.cli.login_cmd import _run_oauth_login
 
     monkeypatch.setattr("builtins.input", lambda _: "abc123")
-    monkeypatch.setattr("modeldeck.cli.login_cmd.extract_code_from_redirect", lambda x: x)
+    monkeypatch.setattr("modeldeck.cli.login_cmd.parse_code_and_state", lambda x: (x, None))
 
     async def empty_exchange(*a, **kw):
         return {}  # no access_token
@@ -112,7 +112,7 @@ async def test_run_oauth_login_success(monkeypatch, tmp_path):
     from modeldeck.cli.login_cmd import _run_oauth_login
 
     monkeypatch.setattr("builtins.input", lambda _: "abc123")
-    monkeypatch.setattr("modeldeck.cli.login_cmd.extract_code_from_redirect", lambda x: x)
+    monkeypatch.setattr("modeldeck.cli.login_cmd.parse_code_and_state", lambda x: (x, None))
 
     async def good_exchange(*a, **kw):
         return {"access_token": "at", "refresh_token": "rt"}

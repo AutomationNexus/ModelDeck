@@ -47,3 +47,30 @@ export interface VerifyResponse {
   account_id: string;
   auth_mode: string;
 }
+
+export interface RenameResponse {
+  status: string;
+  account_id: string;
+  label: string;
+  entity_id_changed: boolean;
+}
+
+export interface AccountEntity {
+  metric: string;
+  name: string;
+  entity_id: string;
+  object_id: string;
+  state_topic: string;
+  discovery_topic: string;
+}
+
+export interface AccountEntitiesResponse {
+  provider: string;
+  account_id: string;
+  label: string;
+  device_id: string;
+  topic_prefix: string;
+  discovery_prefix: string;
+  availability_topic: string;
+  entities: AccountEntity[];
+}

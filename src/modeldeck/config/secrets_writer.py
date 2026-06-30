@@ -109,6 +109,69 @@ def persist_provider_oauth_tokens(
     return True
 
 
+def move_account_secrets(
+    provider_id: str,
+    old_id: str,
+    new_id: str,
+    *,
+    secrets_file: Path | None = None,
+) -> bool:
+    """Rename a secrets block from old_id to new_id within a provider.
+
+    Used when an account rename changes the account slug (entity-id update
+    path).  Atomic: writes to a temp file then replaces.
+
+    Returns True if the block was moved, False if old_id was not found.
+    """
+    path = secrets_file or secrets_path()
+    if not path.exists():
+        return False
+
+    try:
+        raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        logger.warning("Could not read secrets file for account move")
+        return False
+
+    if not isinstance(raw, dict):
+        return False
+
+    providers = raw.get("providers", {})
+    if not isinstance(providers, dict):
+        return False
+
+    provider_block = providers.get(provider_id, {})
+    if not isinstance(provider_block, dict):
+        return False
+
+    # Migrate flat legacy format if needed.
+    from modeldeck.config.addon_bootstrap import _ALL_SECRET_FIELDS
+
+    if any(k in _ALL_SECRET_FIELDS for k in provider_block):
+        provider_block = {"default": dict(provider_block)}
+        providers[provider_id] = provider_block
+
+    if old_id not in provider_block:
+        return False
+
+    provider_block[new_id] = provider_block.pop(old_id)
+    raw["providers"][provider_id] = provider_block
+
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    tmp.replace(path)
+    try:
+        import os as _os
+        _os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
+    logger.info(
+        "Moved secrets for provider %s: %s -> %s",
+        provider_id, old_id, new_id,
+    )
+    return True
+
+
 def write_account_secrets(
     provider_id: str,
     account_id: str,
