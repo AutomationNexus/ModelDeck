@@ -16,6 +16,7 @@ No secret values are returned in API responses.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -262,7 +263,10 @@ def create_app() -> FastAPI:
         redoc_url=None,
     )
 
-    static_dir = Path(__file__).parent / "static"
+    # Allow CI / tests to override the static dir via env var so path
+    # resolution is independent of editable-install layout.
+    _static_env = os.environ.get("MODELDECK_STATIC_DIR")
+    static_dir = Path(_static_env) if _static_env else Path(__file__).parent / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
 

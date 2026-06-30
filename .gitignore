@@ -30,7 +30,8 @@ tmp/
 Thumbs.db
 
 # Built Vite dashboard (gitignored — built in Docker/CI; see frontend/README.md)
-src/modeldeck/webui/static/
+src/modeldeck/webui/static/*
+!src/modeldeck/webui/static/.gitkeep
 
 # Vite / Node
 frontend/node_modules/

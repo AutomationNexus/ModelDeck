@@ -1,10 +1,8 @@
 """Playwright E2E fixtures for ModelDeck web UI smoke tests.
 
-Starts the ModelDeck web UI in a background thread using uvicorn so the
-server runs in the same process and shares the filesystem — guaranteeing
-that the static SPA assets (downloaded by CI before this suite runs) are
-served from ``src/modeldeck/webui/static/`` without subprocess path
-ambiguity.
+Starts the ModelDeck web UI in a background thread using uvicorn.
+The static SPA directory is resolved from the repo root so it works
+regardless of editable-install path layout in CI.
 
 Set ``MODELDECK_WEBUI_URL`` to override the default http://127.0.0.1:8099.
 """
@@ -14,6 +12,7 @@ import os
 import threading
 import time
 import urllib.request
+from pathlib import Path
 
 import pytest
 from playwright.sync_api import Browser, BrowserContext, Page
@@ -21,13 +20,15 @@ from playwright.sync_api import Browser, BrowserContext, Page
 BASE_URL = os.environ.get("MODELDECK_WEBUI_URL", "http://127.0.0.1:8099")
 _PORT = int(BASE_URL.rstrip("/").rsplit(":", 1)[-1]) if ":" in BASE_URL else 8099
 
+# Repo root: tests/e2e_frontend/ → tests/ → repo root
+_REPO_ROOT = Path(__file__).parent.parent.parent
+_STATIC_DIR = _REPO_ROOT / "src" / "modeldeck" / "webui" / "static"
+
 
 @pytest.fixture(scope="session")
 def webui_server(tmp_path_factory):
     """Start modeldeck webui in a background thread; yield base URL."""
     import uvicorn
-
-    from modeldeck.webui.app import create_app
 
     tmp = tmp_path_factory.mktemp("config")
     cfg = tmp / "modeldeck.yaml"
@@ -38,6 +39,11 @@ def webui_server(tmp_path_factory):
         encoding="utf-8",
     )
     os.environ.setdefault("MODELDECK_CONFIG_DIR", str(tmp))
+    # Tell create_app() exactly where the built SPA lives so there is no
+    # ambiguity from editable-install __file__ resolution in CI.
+    os.environ["MODELDECK_STATIC_DIR"] = str(_STATIC_DIR)
+
+    from modeldeck.webui.app import create_app
 
     app = create_app()
     config = uvicorn.Config(app, host="127.0.0.1", port=_PORT, log_level="error")
