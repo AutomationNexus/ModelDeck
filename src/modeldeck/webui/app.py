@@ -32,6 +32,7 @@ from modeldeck.auth.oauth_flow import (
     build_authorize_url,
     exchange_code,
     extract_code_from_redirect,
+    extract_codex_account_id,
     generate_state,
     generate_verifier,
 )
@@ -56,14 +57,22 @@ _PROVIDER_META: dict[str, dict[str, Any]] = {
     "codex": {
         "name": "OpenAI Codex",
         "oauth": True,
+        # Default mode for the wizard — OAuth is recommended for independent sessions.
+        "default_mode": "subscription",
+        # paste_back_note: shown in the OAuth wizard for this provider.
+        "oauth_paste_back_note": (
+            "Open the authorization URL in your browser and sign in. "
+            "The page at localhost:1455 won't load — copy the entire URL "
+            "(or just the code= value) from your browser's address bar and paste it here."
+        ),
         "auth_modes": [
             {
                 "id": "subscription",
-                "label": "Subscription (ChatGPT Plus/Pro)",
+                "label": "Subscription (ChatGPT Plus/Pro) — OAuth",
                 "fields": [
-                    {"id": "access_token", "label": "Access token", "type": "password", "hint": "eyJ… from ~/.codex/auth.json"},
-                    {"id": "refresh_token", "label": "Refresh token", "type": "password", "hint": "rt_… from ~/.codex/auth.json"},
-                    {"id": "account_id", "label": "Account ID", "type": "text", "hint": "user-… from ~/.codex/auth.json"},
+                    {"id": "access_token", "label": "Access token", "type": "password", "hint": "eyJ… from ~/.codex/auth.json (or use OAuth above)"},
+                    {"id": "refresh_token", "label": "Refresh token", "type": "password", "hint": "Optional, from auth.json"},
+                    {"id": "account_id", "label": "Account ID", "type": "text", "hint": "user-… from auth.json (filled automatically by OAuth)"},
                 ],
                 "oauth_capable": True,
             },
@@ -80,10 +89,17 @@ _PROVIDER_META: dict[str, dict[str, Any]] = {
     "claude": {
         "name": "Claude",
         "oauth": True,
+        # Default mode for the wizard — OAuth gives an independent session.
+        "default_mode": "oauth",
+        "oauth_paste_back_note": (
+            "Open the authorization URL in your browser and sign in to Claude. "
+            "After authorizing, the page at modeldeck.local won't load — "
+            "copy the code= value from your browser's address bar and paste it here."
+        ),
         "auth_modes": [
             {
                 "id": "oauth",
-                "label": "OAuth (Claude Code)",
+                "label": "OAuth (Claude Code — independent session)",
                 "fields": [],
                 "oauth_capable": True,
             },
@@ -103,6 +119,12 @@ _PROVIDER_META: dict[str, dict[str, Any]] = {
     "cursor": {
         "name": "Cursor",
         "oauth": False,
+        "default_mode": "personal",
+        # no_oauth_note: shown on Cursor accounts in the UI.
+        "no_oauth_note": (
+            "Cursor has no public OAuth flow. This token shares your browser/app session "
+            "and may be invalidated if you log out of Cursor on your device."
+        ),
         "auth_modes": [
             {
                 "id": "personal",
@@ -385,12 +407,26 @@ def create_app() -> FastAPI:
         if not fields:
             raise HTTPException(status_code=502, detail="Token exchange returned no tokens.")
 
+        # Codex: extract account_id from id_token and persist it.
+        # The codex subscription collector sends ChatGPT-Account-Id header
+        # using this value; without it some API calls may fail.
+        if provider == "codex":
+            id_token = tokens.get("id_token", "")
+            if isinstance(id_token, str) and id_token:
+                acct_id_val = extract_codex_account_id(id_token)
+                if acct_id_val:
+                    fields["account_id"] = acct_id_val
+
         write_account_secrets(provider, account_id, fields)
-        # Upsert: create or enable existing account with oauth mode.
+
+        # Determine the correct auth_mode for this provider's OAuth flow:
+        # - Codex OAuth tokens are used in "subscription" mode by the collector
+        # - Claude OAuth tokens are used in "oauth" mode
+        oauth_auth_mode = "subscription" if provider == "codex" else "oauth"
         upsert_account_in_config(
-            provider, account_id, session["label"], auth_mode="oauth", enabled=True
+            provider, account_id, session["label"], auth_mode=oauth_auth_mode, enabled=True
         )
-        logger.info("OAuth complete for %s/%s", provider, account_id)
+        logger.info("OAuth complete for %s/%s (mode=%s)", provider, account_id, oauth_auth_mode)
         return JSONResponse({"status": "ok", "account_id": account_id, "provider": provider})
 
     # -----------------------------------------------------------------------
@@ -584,6 +620,71 @@ def create_app() -> FastAPI:
         raw["providers"][provider] = accounts
         cfg_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
         return JSONResponse({"status": "ok", "enabled": bool(enabled)})
+
+    # -----------------------------------------------------------------------
+    # POST /accounts/{provider}/{account_id}/switch-oauth
+    # Switch an existing account to OAuth mode and start the OAuth wizard.
+    # Returns the same payload as oauth/start so the UI can immediately show
+    # the authorize URL and paste box without a separate request.
+    # 400 for Cursor (no OAuth support).
+    # -----------------------------------------------------------------------
+
+    @app.post("/accounts/{provider}/{account_id}/switch-oauth",
+              response_model=OAuthStartResponse)
+    async def switch_oauth(provider: str, account_id: str) -> dict[str, Any]:
+        """Switch account to OAuth mode and return authorize URL (combined action)."""
+        spec = get_spec(provider)
+        if spec is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Provider '{provider}' does not support OAuth. "
+                    "Cursor has no public OAuth/device flow — use Paste credentials instead."
+                ),
+            )
+
+        # Determine the oauth auth_mode label for this provider.
+        oauth_mode = "subscription" if provider == "codex" else "oauth"
+
+        # Look up current label (preserve it); update auth_mode in config.
+        label = account_id
+        try:
+            cfg, _ = load_config()
+            accts = getattr(cfg.providers, provider, [])
+            for a in accts:
+                if isinstance(a, ProviderAccount) and a.id == account_id:
+                    label = a.label or account_id
+                    break
+        except Exception:
+            pass
+
+        upsert_account_in_config(
+            provider, account_id, label, auth_mode=oauth_mode, enabled=False
+        )
+
+        # Start the OAuth session.
+        _prune_sessions()
+        verifier = generate_verifier()
+        state = generate_state()
+        url = build_authorize_url(spec, verifier, state)
+
+        session_key = generate_state()
+        _OAUTH_SESSIONS[session_key] = {
+            "verifier": verifier,
+            "state": state,
+            "provider": provider,
+            "account_id": account_id,
+            "label": label,
+            "expires": time.time() + _SESSION_TTL,
+        }
+        logger.info("Switch-to-OAuth started for %s/%s (mode=%s)", provider, account_id, oauth_mode)
+        return {
+            "authorize_url": url,
+            "session_key": session_key,
+            "provider": provider,
+            "account_id": account_id,
+            "label": label,
+        }
 
     # -----------------------------------------------------------------------
     # GET /providers — provider metadata + per-mode credential field maps

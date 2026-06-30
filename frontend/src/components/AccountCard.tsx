@@ -8,6 +8,7 @@ import {
   startOAuth,
   completeOAuth,
   pasteToken,
+  switchToOAuth,
 } from "../api/accounts";
 import { ApiError } from "../api/client";
 import { ProviderIcon } from "./ProviderIcon";
@@ -138,6 +139,36 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
     (m) => (m.id === auth_mode || auth_mode === "auto") && m.oauth_capable,
   );
 
+  // "Switch to OAuth" is shown when:
+  // - the provider supports OAuth (codex or claude)
+  // - the current auth_mode is NOT already the OAuth mode for this provider
+  //   (subscription=OAuth for codex, oauth=OAuth for claude)
+  const oauthMode = provider === "codex" ? "subscription" : "oauth";
+  const canSwitchToOAuth =
+    providerMeta?.oauth === true &&
+    auth_mode !== oauthMode &&
+    auth_mode !== "auto";
+
+  const noOAuthNote = providerMeta?.no_oauth_note;
+  const pasteBackNote = providerMeta?.oauth_paste_back_note ??
+    "Open the URL, sign in, then copy the code= value from the browser's address bar and paste it here.";
+
+  // Switch to OAuth: update mode in config then open wizard.
+  async function handleSwitchToOAuth() {
+    setOauthErr("");
+    setOauthBusy(true);
+    try {
+      const res = await switchToOAuth(provider, id);
+      setOauthUrl(res.authorize_url);
+      setOauthSessionKey(res.session_key);
+      setModal("oauth");
+    } catch (e) {
+      onError(e instanceof ApiError ? e.detail : String(e));
+    } finally {
+      setOauthBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="card account-card">
@@ -170,11 +201,38 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
           </div>
         </div>
 
+        {/* Cursor no-OAuth warning */}
+        {noOAuthNote && (
+          <div style={{
+            margin: "8px 0 0",
+            padding: "6px 10px",
+            fontSize: "0.78rem",
+            color: "var(--warning)",
+            background: "var(--warning-dim)",
+            border: "1px solid rgba(245,158,11,0.25)",
+            borderRadius: "var(--radius-sm)",
+          }}>
+            ⚠ {noOAuthNote}
+          </div>
+        )}
+
         <div className="account-card-bottom">
           <button className="btn btn-secondary" disabled={verifying} onClick={handleVerify}>
             {verifying ? "Checking…" : "Verify"}
           </button>
-          {isOAuthCapable && (
+          {/* Switch to OAuth: shown for non-OAuth Claude/Codex accounts */}
+          {canSwitchToOAuth && (
+            <button
+              className="btn btn-secondary"
+              disabled={oauthBusy}
+              onClick={handleSwitchToOAuth}
+              title="Switch this account to OAuth for an independent session"
+            >
+              Switch to OAuth
+            </button>
+          )}
+          {/* Re-login: shown when already in OAuth mode */}
+          {isOAuthCapable && !canSwitchToOAuth && (
             <button className="btn btn-secondary" disabled={oauthBusy} onClick={handleStartOAuth}>
               Re-login (OAuth)
             </button>
@@ -240,17 +298,26 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
         </div>
       )}
 
-      {/* OAuth re-login modal */}
+      {/* OAuth re-login / switch-to-OAuth modal */}
       {modal === "oauth" && (
         <div className="overlay" onClick={() => setModal("none")}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title">Re-login — {label || id}</span>
+              <span className="modal-title">OAuth login — {label || id}</span>
               <button className="btn btn-ghost btn-icon" onClick={() => setModal("none")}>×</button>
             </div>
             <div className="modal-body">
-              <p className="text-muted" style={{ fontSize: "0.85rem" }}>
-                Open the link in your browser, authorize, then paste the code or redirect URL.
+              {/* Provider-specific paste-back instructions */}
+              <p style={{
+                fontSize: "0.82rem",
+                color: "var(--text-secondary)",
+                background: "var(--bg-input)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)",
+                padding: "8px 10px",
+                lineHeight: 1.5,
+              }}>
+                {pasteBackNote}
               </p>
               <div className="oauth-box">
                 <span className="text-muted" style={{ fontSize: "0.73rem" }}>Authorization URL</span>

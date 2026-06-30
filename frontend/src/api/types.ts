@@ -23,6 +23,9 @@ export interface AuthMode {
 export interface ProviderMeta {
   name: string;
   oauth: boolean;
+  default_mode?: string;
+  oauth_paste_back_note?: string;
+  no_oauth_note?: string;
   auth_modes: AuthMode[];
 }
 

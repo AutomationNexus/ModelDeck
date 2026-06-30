@@ -12,7 +12,7 @@ No user credentials, account IDs, or tokens are stored here.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,11 @@ class ProviderOAuthSpec:
     client_id: str
     scopes: tuple[str, ...]
     redirect_uri: str = "https://modeldeck.local/oauth/callback"
+    # "json" (default) sends body as JSON; "form" sends application/x-www-form-urlencoded.
+    # Codex token endpoint requires form-encoding; Claude accepts JSON.
+    token_encoding: str = "json"
+    # Extra key=value pairs appended to the authorization URL query string.
+    extra_authorize_params: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
     def env(self, key: str, default: str) -> str:
         """Return an env-overridden value for this provider's protocol field."""
@@ -59,12 +64,27 @@ class ProviderOAuthSpec:
         """Redirect URI, overridable via MODELDECK_{PROVIDER}_OAUTH_REDIRECT_URI."""
         return self.env("REDIRECT_URI", self.redirect_uri)
 
+    @property
+    def effective_token_encoding(self) -> str:
+        """Token encoding, overridable via MODELDECK_{PROVIDER}_OAUTH_TOKEN_ENCODING."""
+        return self.env("TOKEN_ENCODING", self.token_encoding)
+
+    @property
+    def effective_extra_authorize_params(self) -> tuple[tuple[str, str], ...]:
+        """Extra authorize params; individual values are env-overridable."""
+        result = []
+        for key, default in self.extra_authorize_params:
+            env_key = f"MODELDECK_{self.provider.upper()}_OAUTH_{key.upper()}"
+            result.append((key, os.environ.get(env_key, default)))
+        return tuple(result)
+
 
 # ---------------------------------------------------------------------------
 # Claude OAuth spec
 # Verified working: api.anthropic.com/api/oauth/usage returns 200 with these.
 # Token URL: platform.claude.com/v1/oauth/token
 # Client ID: public Claude Code client (non-secret, same as Claude CLI uses).
+# Token endpoint accepts JSON body.
 # ---------------------------------------------------------------------------
 CLAUDE_SPEC = ProviderOAuthSpec(
     provider="claude",
@@ -78,18 +98,44 @@ CLAUDE_SPEC = ProviderOAuthSpec(
         "user:mcp_servers",
         "user:file_upload",
     ),
+    redirect_uri="https://modeldeck.local/oauth/callback",
+    token_encoding="json",
 )
 
 # ---------------------------------------------------------------------------
 # Codex / ChatGPT OAuth spec
-# Uses the same OAuth infrastructure as the Codex CLI / ChatGPT web app.
+# Verified from openai/codex source (codex-rs/login/src/server.rs).
+# Issuer: auth.openai.com (Hydra OAuth server)
+# Client ID: public Codex CLI client (non-secret; same value used in
+#             codex_subscription.py for token refresh).
+# Redirect URI: http://localhost:1455/auth/callback (allow-listed by OpenAI).
+#   Paste-back flow: the redirect page won't load (it goes to localhost on the
+#   user's PC, not the HA host), but the user copies ?code=... from the
+#   browser address bar and pastes it back into the web UI.
+# Token endpoint requires application/x-www-form-urlencoded (not JSON).
+# Extra authorize params match the Codex CLI's simplified login flow.
 # ---------------------------------------------------------------------------
 CODEX_SPEC = ProviderOAuthSpec(
     provider="codex",
-    authorize_url="https://chatgpt.com/api/auth/authorize",
-    token_url="https://chatgpt.com/api/auth/token",
-    client_id="app_codex",
-    scopes=("openid", "offline_access"),
+    authorize_url="https://auth.openai.com/oauth/authorize",
+    token_url="https://auth.openai.com/oauth/token",
+    client_id="app_EMoamEEZ73f0CkXaXp7hrann",
+    scopes=(
+        "openid",
+        "profile",
+        "email",
+        "offline_access",
+        "api.connectors.read",
+        "api.connectors.invoke",
+    ),
+    redirect_uri="http://localhost:1455/auth/callback",
+    token_encoding="form",
+    extra_authorize_params=(
+        ("id_token_add_organizations", "true"),
+        ("codex_cli_simplified_flow", "true"),
+        # Overridable via MODELDECK_CODEX_OAUTH_ORIGINATOR
+        ("originator", "codex_cli_rs"),
+    ),
 )
 
 # ---------------------------------------------------------------------------

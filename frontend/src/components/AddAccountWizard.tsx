@@ -5,6 +5,7 @@ import {
   startOAuth,
   completeOAuth,
   pasteToken,
+  getProviderMeta,
 } from "../api/accounts";
 import { ApiError } from "../api/client";
 
@@ -37,13 +38,43 @@ export function AddAccountWizard({ providers, onDone, onCancel, onError }: Props
   const [busy, setBusy] = useState(false);
   const [fieldError, setFieldError] = useState("");
 
-  const providerMeta = providers.find(
-    (p) => p.name.toLowerCase().includes(provider) || p.name === PROVIDER_LABELS[provider],
-  );
+  const providerMeta = getProviderMeta(providers, provider);
   const authModes = providerMeta?.auth_modes ?? [];
+
+  // Default to the provider's recommended mode when switching provider.
+  function handleProviderChange(newProvider: string) {
+    setProvider(newProvider);
+    setFieldError("");
+    const meta = getProviderMeta(providers, newProvider);
+    if (meta) {
+      const defaultId = meta.default_mode ?? meta.auth_modes[0]?.id ?? null;
+      const defaultMode = meta.auth_modes.find((m) => m.id === defaultId) ?? meta.auth_modes[0] ?? null;
+      setAuthMode(defaultMode);
+    } else {
+      setAuthMode(null);
+    }
+  }
+
+  // Pre-select default mode when entering mode step.
+  function handleGoToModeStep() {
+    if (authModes.length > 0 && !authMode) {
+      const defaultId = providerMeta?.default_mode ?? authModes[0]?.id;
+      const defaultMode = authModes.find((m) => m.id === defaultId) ?? authModes[0] ?? null;
+      setAuthMode(defaultMode);
+    }
+    setFieldError("");
+    setStep("mode");
+  }
 
   const stepDots: Step[] = ["provider", "mode", "credentials"];
   const stepIdx = stepDots.indexOf(step) === -1 ? stepDots.length - 1 : stepDots.indexOf(step);
+
+  // Paste-back note for the current provider (shown in OAuth step).
+  const pasteBackNote = providerMeta?.oauth_paste_back_note ??
+    "Open the URL, sign in, then copy the code= value from the browser's address bar and paste it here.";
+
+  // Cursor no-OAuth note.
+  const noOAuthNote = providerMeta?.no_oauth_note;
 
   // ── Step handlers ────────────────────────────────────────
 
@@ -71,7 +102,6 @@ export function AddAccountWizard({ providers, onDone, onCancel, onError }: Props
 
   async function handleCredentialSubmit() {
     if (!authMode) return;
-    // At least one field must be filled.
     const filled = authMode.fields.filter((f) => fieldValues[f.id]?.trim());
     if (filled.length === 0) {
       setFieldError("Fill in at least one credential field.");
@@ -139,7 +169,7 @@ export function AddAccountWizard({ providers, onDone, onCancel, onError }: Props
               <p className="wizard-step-label">Step 1 — Choose provider</p>
               <div className="form-group">
                 <label className="form-label">Provider</label>
-                <select value={provider} onChange={(e) => { setProvider(e.target.value); setAuthMode(null); }}>
+                <select value={provider} onChange={(e) => handleProviderChange(e.target.value)}>
                   {PROVIDER_IDS.map((id) => (
                     <option key={id} value={id}>{PROVIDER_LABELS[id]}</option>
                   ))}
@@ -154,10 +184,24 @@ export function AddAccountWizard({ providers, onDone, onCancel, onError }: Props
                   onChange={(e) => setLabel(e.target.value)}
                 />
               </div>
+              {/* Cursor no-OAuth note */}
+              {noOAuthNote && (
+                <p style={{
+                  fontSize: "0.8rem",
+                  color: "var(--warning)",
+                  background: "var(--warning-dim)",
+                  border: "1px solid rgba(245,158,11,0.3)",
+                  borderRadius: "var(--radius-sm)",
+                  padding: "8px 10px",
+                  marginTop: 4,
+                }}>
+                  ⚠ {noOAuthNote}
+                </p>
+              )}
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-              <button className="btn btn-primary" onClick={() => setStep("mode")}>Next</button>
+              <button className="btn btn-primary" onClick={handleGoToModeStep}>Next</button>
             </div>
           </>
         )}
@@ -180,6 +224,7 @@ export function AddAccountWizard({ providers, onDone, onCancel, onError }: Props
                     cursor: "pointer",
                     background: authMode?.id === mode.id ? "var(--accent-dim)" : "var(--bg-input)",
                     transition: "border-color 0.15s",
+                    marginBottom: 6,
                   }}
                 >
                   <input
@@ -187,18 +232,18 @@ export function AddAccountWizard({ providers, onDone, onCancel, onError }: Props
                     name="auth_mode"
                     value={mode.id}
                     checked={authMode?.id === mode.id}
-                    onChange={() => setAuthMode(mode)}
+                    onChange={() => { setAuthMode(mode); setFieldError(""); }}
                     style={{ marginTop: 3 }}
                   />
                   <div>
                     <div style={{ fontWeight: 600, fontSize: "0.88rem" }}>{mode.label}</div>
                     {mode.oauth_capable && (
-                      <div className="text-muted" style={{ marginTop: 2 }}>
-                        Login via OAuth — no manual token copy needed
+                      <div className="text-muted" style={{ marginTop: 2, fontSize: "0.8rem" }}>
+                        Independent session — does not share your local CLI login
                       </div>
                     )}
                     {!mode.oauth_capable && mode.fields.length > 0 && (
-                      <div className="text-muted" style={{ marginTop: 2 }}>
+                      <div className="text-muted" style={{ marginTop: 2, fontSize: "0.8rem" }}>
                         Paste: {mode.fields.map((f) => f.label).join(", ")}
                       </div>
                     )}
@@ -254,12 +299,20 @@ export function AddAccountWizard({ providers, onDone, onCancel, onError }: Props
           <>
             <div className="modal-body">
               <p className="wizard-step-label">Step 3 — Authorize</p>
-              <p className="text-muted" style={{ fontSize: "0.85rem" }}>
-                Open the link below in your browser and log in. After authorizing, paste the code
-                or the full redirect URL back here.
+              {/* Paste-back instruction */}
+              <p style={{
+                fontSize: "0.82rem",
+                color: "var(--text-secondary)",
+                background: "var(--bg-input)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)",
+                padding: "8px 10px",
+                lineHeight: 1.5,
+              }}>
+                {pasteBackNote}
               </p>
               <div className="oauth-box">
-                <span className="text-muted" style={{ fontSize: "0.73rem" }}>Authorization URL</span>
+                <span className="text-muted" style={{ fontSize: "0.73rem" }}>Authorization URL — open in browser</span>
                 <a
                   className="oauth-url"
                   href={oauthUrl}
@@ -274,7 +327,7 @@ export function AddAccountWizard({ providers, onDone, onCancel, onError }: Props
                 <input
                   type="text"
                   value={oauthCode}
-                  placeholder="Paste the authorization code or full redirect URL…"
+                  placeholder="Paste the full URL or just the code= value…"
                   onChange={(e) => setOauthCode(e.target.value)}
                   autoComplete="off"
                 />

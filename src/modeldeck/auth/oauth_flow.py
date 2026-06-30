@@ -4,16 +4,25 @@ Implements:
 - PKCE S256 verifier/challenge generation
 - Authorization URL construction (user opens in browser)
 - Authorization code exchange for access + refresh tokens
+  (per-provider body encoding: JSON for Claude, form for Codex)
 - Token refresh (mirrors existing per-collector refresh logic)
+- id_token JWT claim extraction (Codex account_id)
 
 Uses only httpx — no additional dependencies.
 No user secrets or account-specific data are stored in this module.
+
+Paste-back flow note (Codex):
+  The redirect URI is http://localhost:1455/auth/callback (allow-listed by
+  OpenAI). ModelDeck runs on the HA host, not the user's PC, so the redirect
+  won't load in the browser. The user copies the ``?code=...`` value from the
+  browser's address bar and pastes it into the web UI.
 """
 
 from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import secrets
 import urllib.parse
 from typing import Any
@@ -81,15 +90,17 @@ def build_authorize_url(
         back the authorization code (or the full redirect URL).
     """
     challenge = derive_challenge(verifier)
-    params = {
-        "response_type": "code",
-        "client_id": spec.effective_client_id,
-        "redirect_uri": spec.effective_redirect_uri,
-        "scope": " ".join(spec.effective_scopes),
-        "state": state,
-        "code_challenge": challenge,
-        "code_challenge_method": "S256",
-    }
+    params: list[tuple[str, str]] = [
+        ("response_type", "code"),
+        ("client_id", spec.effective_client_id),
+        ("redirect_uri", spec.effective_redirect_uri),
+        ("scope", " ".join(spec.effective_scopes)),
+        ("state", state),
+        ("code_challenge", challenge),
+        ("code_challenge_method", "S256"),
+    ]
+    # Append provider-specific extra params (e.g. Codex originator).
+    params.extend(spec.effective_extra_authorize_params)
     return spec.effective_authorize_url + "?" + urllib.parse.urlencode(params)
 
 
@@ -120,8 +131,9 @@ async def exchange_code(
     Returns
     -------
     dict
-        Token response payload containing at minimum ``access_token``.
-        May contain ``refresh_token``, ``expires_in``, ``token_type``.
+        Full token response payload. Contains at minimum ``access_token``.
+        May contain ``refresh_token``, ``id_token``, ``expires_in``,
+        ``token_type``.
 
     Raises
     ------
@@ -179,6 +191,67 @@ async def refresh_tokens(
 
 
 # ---------------------------------------------------------------------------
+# id_token claim extraction
+# ---------------------------------------------------------------------------
+
+def decode_id_token_claims(id_token: str) -> dict[str, Any]:
+    """Decode the payload claims of a JWT id_token (no signature verification).
+
+    Only the middle (payload) segment is decoded; the signature is not
+    verified because this is our own freshly-obtained token from the issuer
+    and we only need claim values for local persistence (account_id, etc.).
+
+    Parameters
+    ----------
+    id_token:
+        A JWT string in ``header.payload.signature`` format.
+
+    Returns
+    -------
+    dict
+        Decoded claims, or an empty dict if the token cannot be parsed.
+    """
+    try:
+        parts = id_token.split(".")
+        if len(parts) < 2:
+            return {}
+        # Base64url-decode with padding.
+        payload_b64 = parts[1]
+        padding = 4 - (len(payload_b64) % 4)
+        if padding != 4:
+            payload_b64 += "=" * padding
+        raw = base64.urlsafe_b64decode(payload_b64)
+        return json.loads(raw)  # type: ignore[no-any-return]
+    except Exception:
+        return {}
+
+
+def extract_codex_account_id(id_token: str) -> str | None:
+    """Extract the ChatGPT account_id from a Codex id_token.
+
+    The Codex CLI stores the ``chatgpt_account_id`` inside the nested
+    ``https://api.openai.com/auth`` object in the JWT payload.
+
+    Parameters
+    ----------
+    id_token:
+        JWT id_token received from the Codex OAuth token endpoint.
+
+    Returns
+    -------
+    str or None
+        The account_id value, or None if not found.
+    """
+    claims = decode_id_token_claims(id_token)
+    auth_block = claims.get("https://api.openai.com/auth")
+    if isinstance(auth_block, dict):
+        account_id = auth_block.get("chatgpt_account_id")
+        if isinstance(account_id, str) and account_id:
+            return account_id
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
@@ -188,14 +261,28 @@ async def _post_token(
     *,
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
-    """POST to the token endpoint and validate the response."""
+    """POST to the token endpoint using the provider's required encoding.
+
+    Codex requires ``application/x-www-form-urlencoded``; Claude uses JSON.
+    The encoding is determined by ``spec.effective_token_encoding``.
+    """
     url = spec.effective_token_url
+    encoding = spec.effective_token_encoding  # "json" or "form"
     try:
-        if client is not None:
-            response = await client.post(url, json=body, timeout=30.0)
+        if encoding == "form":
+            # Send as application/x-www-form-urlencoded (Codex requirement).
+            if client is not None:
+                response = await client.post(url, data=body, timeout=30.0)
+            else:
+                async with httpx.AsyncClient(timeout=30.0) as c:
+                    response = await c.post(url, data=body)
         else:
-            async with httpx.AsyncClient(timeout=30.0) as c:
-                response = await c.post(url, json=body)
+            # Default: send as JSON (Claude).
+            if client is not None:
+                response = await client.post(url, json=body, timeout=30.0)
+            else:
+                async with httpx.AsyncClient(timeout=30.0) as c:
+                    response = await c.post(url, json=body)
         response.raise_for_status()
         payload: dict[str, Any] = response.json()
     except httpx.HTTPStatusError as exc:
@@ -215,8 +302,15 @@ def extract_code_from_redirect(redirect_url: str) -> str:
     """Extract the authorization code from a redirect URL or bare code string.
 
     Accepts either the full redirect URL (e.g.
-    ``https://modeldeck.local/oauth/callback?code=abc&state=xyz``) or just
-    the bare code string that the user copied from the browser.
+    ``https://modeldeck.local/oauth/callback?code=abc&state=xyz``
+    or ``http://localhost:1455/auth/callback?code=abc&state=xyz``)
+    or just the bare code string that the user copied from the browser.
+
+    Paste-back usage note:
+        For Codex, the redirect URL is ``http://localhost:1455/auth/callback``
+        which won't load on the user's PC when ModelDeck runs on the HA host.
+        The user copies the full URL (or just the ``code`` parameter value)
+        from the browser's address bar before the page fails to load.
     """
     stripped = redirect_url.strip()
     if stripped.startswith("http"):

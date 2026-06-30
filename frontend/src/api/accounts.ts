@@ -32,6 +32,13 @@ export async function startOAuth(
   return api.post<OAuthStartResponse>(`accounts/${provider}/${accountId}/oauth/start`);
 }
 
+export async function switchToOAuth(
+  provider: string,
+  accountId: string,
+): Promise<OAuthStartResponse> {
+  return api.post<OAuthStartResponse>(`accounts/${provider}/${accountId}/switch-oauth`);
+}
+
 export async function completeOAuth(
   provider: string,
   accountId: string,
@@ -79,4 +86,9 @@ export async function deleteAccount(
 export function getAuthModes(providers: ProviderMeta[], providerId: string): AuthMode[] {
   return providers.find((p) => p.name.toLowerCase().includes(providerId) || p.name === providerId)
     ?.auth_modes ?? [];
+}
+
+/** Return provider meta for a given provider id substring. */
+export function getProviderMeta(providers: ProviderMeta[], providerId: string): ProviderMeta | undefined {
+  return providers.find((p) => p.name.toLowerCase().includes(providerId) || p.name === providerId);
 }
