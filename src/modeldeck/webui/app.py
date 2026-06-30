@@ -268,6 +268,12 @@ def create_app() -> FastAPI:
     _static_env = os.environ.get("MODELDECK_STATIC_DIR")
     static_dir = Path(_static_env) if _static_env else Path(__file__).parent / "static"
     if static_dir.exists():
+        # Mount /static for legacy references and /assets for Vite-built bundles
+        # (Vite base:"./" makes asset URLs relative, so ./assets/x.js from page
+        # at / becomes GET /assets/x.js — serve assets dir at /assets directly).
+        assets_dir = static_dir / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     # -----------------------------------------------------------------------
