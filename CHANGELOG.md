@@ -2,6 +2,48 @@
 
 All notable changes are documented here.
 
+## [Unreleased] - modern web UI + functional fixes
+
+### Breaking
+
+- **HAOS add-on provider sections removed**: codex/claude/cursor blocks removed from the
+  add-on Configuration tab. All account setup moves to the **Ingress web UI** (Open Web UI).
+  Existing add-on option values for provider credentials become inert; re-enter tokens via
+  the web UI wizard.
+- **`POST /accounts/{provider}/{id}/token` body changed**: `{"token": ..., "field": ...}`
+  → `{"field": ..., "value": ...}`. Any tooling calling this endpoint directly must update.
+
+### Added
+
+- **Modern Ingress web UI**: Vite + React 19 + TypeScript SPA replacing the minimal inline
+  fallback. HA-themed dark CSS (Zigbee2MQTT-style), card layout, provider icons, live status
+  badges, loading skeletons, error toasts, and 30-second auto-refresh.
+- **Add Account wizard**: single multi-step modal (provider → auth mode → credentials) that
+  creates and enables the account only on credential success. No disabled stubs.
+- **Provider-specific auth modes**: wizard restricts modes and required fields by provider
+  (codex: subscription/api; claude: oauth/cookie; cursor: personal/enterprise).
+- **`GET /providers`** extended with per-mode required credential field metadata so the UI
+  can render the right inputs without hardcoding.
+- `frontend/` directory with `package.json`, `vite.config.ts`, Vitest unit tests.
+- `tests/e2e_frontend/` Playwright broader E2E suite (wizard flow, Ingress base path,
+  account enable/persist, delete).
+- `requirements-dev-frontend.txt` (Playwright pins).
+- Multi-stage `Dockerfile`: `node:24-bookworm-slim AS frontend` → npm build → Python image.
+- CI `has-frontend: true`, `has-e2e: true`, `node-version: "24"`, `spa-artifact-path`.
+
+### Fixed
+
+- **"Add Account does nothing" under HA Ingress**: all frontend API calls now use Ingress-
+  relative base path computed from `window.location.pathname`; absolute `/accounts` calls
+  that hit the HA root are gone.
+- **Errors silently swallowed**: central `api()` client checks `res.ok`, parses backend
+  `detail`, and surfaces errors via toasts and inline form messages.
+- **New accounts left disabled after auth**: `POST /accounts/.../oauth/complete` and
+  `POST /accounts/.../token` now call `upsert_account_in_config()` which updates `enabled`
+  and `auth_mode` on existing accounts (not append-only).
+- **Web-UI accounts wiped on add-on restart**: `render_addon_config()` now merges with
+  existing `modeldeck.yaml`, preserving non-default accounts created via the web UI.
+
 ## [Unreleased] - multi-account + OAuth wizard
 
 ### Breaking

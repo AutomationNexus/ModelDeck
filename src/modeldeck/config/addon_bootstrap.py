@@ -152,10 +152,18 @@ def _provider_secrets(options: dict[str, Any], provider_id: str) -> dict[str, st
     return block
 
 
-def build_config_dict(options: dict[str, Any]) -> dict[str, Any]:
-    """Build the public modeldeck.yaml mapping from add-on options."""
+def build_config_dict(
+    options: dict[str, Any],
+    existing_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the public modeldeck.yaml mapping from add-on options.
+
+    If *existing_config* is provided (the current on-disk modeldeck.yaml), any
+    provider accounts beyond the add-on ``default`` account are preserved so
+    that accounts created via the web UI survive an add-on restart.
+    """
     opts = normalize_options(options)
-    return {
+    config: dict[str, Any] = {
         "mqtt": {
             "host": normalize_mqtt_host(str(_opt(opts, "mqtt_host", "core-mosquitto"))),
             "port": int(_opt(opts, "mqtt_port", 1883)),
@@ -178,6 +186,23 @@ def build_config_dict(options: dict[str, Any]) -> dict[str, Any]:
             "cursor": [_provider_account(opts, "cursor")],
         },
     }
+
+    # Merge web-UI accounts: preserve extra accounts (non-default) from existing config.
+    if existing_config and isinstance(existing_config.get("providers"), dict):
+        for provider_id in ("codex", "claude", "cursor"):
+            existing_accounts = existing_config["providers"].get(provider_id, [])
+            if not isinstance(existing_accounts, list):
+                continue
+            addon_default = config["providers"][provider_id][0]  # the default account
+            # Keep non-default accounts that were created via the web UI.
+            extra = [
+                a for a in existing_accounts
+                if isinstance(a, dict) and a.get("id") != "default"
+            ]
+            if extra:
+                config["providers"][provider_id] = [addon_default, *extra]
+
+    return config
 
 
 def build_secrets_dict(options: dict[str, Any]) -> dict[str, Any]:
@@ -275,7 +300,15 @@ def render_addon_config(
     sec_path = secrets_path or config_dir / "secrets.yaml"
 
     opts = normalize_options(options)
-    config_dict = build_config_dict(opts)
+
+    # Load existing modeldeck.yaml so web-UI accounts survive re-render.
+    existing_config: dict[str, Any] = {}
+    if cfg_path.exists():
+        loaded_cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        if isinstance(loaded_cfg, dict):
+            existing_config = loaded_cfg
+
+    config_dict = build_config_dict(opts, existing_config=existing_config)
     secrets_dict = build_secrets_dict(opts)
 
     AppConfig.model_validate(config_dict)

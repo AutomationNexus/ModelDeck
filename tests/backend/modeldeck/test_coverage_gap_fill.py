@@ -121,7 +121,7 @@ def _make_client_with_claude(monkeypatch, tmp_path):
     sec = SecretsConfig()
     monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, sec))
     monkeypatch.setattr("modeldeck.webui.app.write_account_secrets", lambda *a, **kw: True)
-    monkeypatch.setattr("modeldeck.webui.app._ensure_account_in_config", lambda *a, **kw: None)
+    monkeypatch.setattr("modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None)
     monkeypatch.setenv("MODELDECK_CONFIG_DIR", str(tmp_path))
     (tmp_path / "modeldeck.yaml").write_text(
         "providers:\n  claude:\n    - id: default\n      label: Test\n"
@@ -164,7 +164,7 @@ def test_webui_create_account_load_config_fails(monkeypatch, tmp_path):
         return AppConfig(), SecretsConfig()
 
     monkeypatch.setattr("modeldeck.webui.app.load_config", flaky_load)
-    monkeypatch.setattr("modeldeck.webui.app._ensure_account_in_config", lambda *a, **kw: None)
+    monkeypatch.setattr("modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None)
     app = create_app()
     with TestClient(app, raise_server_exceptions=False) as client:
         resp = client.post("/accounts", json={"provider": "claude", "label": "New"})
@@ -213,7 +213,7 @@ def test_webui_verify_config_error(monkeypatch, tmp_path):
         "modeldeck.webui.app.load_config",
         lambda: (_ for _ in ()).throw(RuntimeError("config error")),
     )
-    monkeypatch.setattr("modeldeck.webui.app._ensure_account_in_config", lambda *a, **kw: None)
+    monkeypatch.setattr("modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None)
     app = create_app()
     with TestClient(app, raise_server_exceptions=False) as client:
         resp = client.post("/accounts/claude/default/verify")
