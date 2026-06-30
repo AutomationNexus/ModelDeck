@@ -35,15 +35,15 @@ def test_discovery_topic_and_payload():
     """Discovery topics and payloads should follow HA conventions."""
     mqtt = MqttConfig()
     snap = _snapshot()
-    topic = discovery_topic(mqtt, "mock", MetricKind.USAGE_PERCENT)
-    assert topic == "homeassistant/sensor/modeldeck_mock_usage_percent/config"
+    topic = discovery_topic(mqtt, "mock", "default", MetricKind.USAGE_PERCENT)
+    assert topic == "homeassistant/sensor/modeldeck_mock_default_usage_percent/config"
     payload = build_discovery_payload(mqtt, snap, MetricKind.USAGE_PERCENT)
-    assert payload["unique_id"] == "modeldeck_mock_usage_percent"
-    assert payload["object_id"] == "modeldeck_mock_usage_percent"
-    assert payload["default_entity_id"] == "sensor.modeldeck_mock_usage_percent"
-    assert payload["state_topic"] == state_topic(mqtt, "mock", MetricKind.USAGE_PERCENT)
+    assert payload["unique_id"] == "modeldeck_mock_default_usage_percent"
+    assert payload["object_id"] == "modeldeck_mock_default_usage_percent"
+    assert payload["default_entity_id"] == "sensor.modeldeck_mock_default_usage_percent"
+    assert payload["state_topic"] == state_topic(mqtt, "mock", "default", MetricKind.USAGE_PERCENT)
     assert payload["unit_of_measurement"] == "%"
-    assert json.loads(json.dumps(payload))["device"]["identifiers"] == ["modeldeck_mock"]
+    assert json.loads(json.dumps(payload))["device"]["identifiers"] == ["modeldeck_mock_default"]
 
 
 def test_format_auto_api_percent():
@@ -67,16 +67,18 @@ def test_discovery_friendly_name_no_duplicate():
 def test_short_slug_discovery_topic_retired():
     """v0.1.0–v0.1.2 short-slug topics differ from stable modeldeck_* entity IDs."""
     mqtt = MqttConfig()
-    assert discovery_topic(mqtt, "codex", MetricKind.USAGE_PERCENT) == (
-        "homeassistant/sensor/modeldeck_codex_usage_percent/config"
+    assert discovery_topic(mqtt, "codex", "default", MetricKind.USAGE_PERCENT) == (
+        "homeassistant/sensor/modeldeck_codex_default_usage_percent/config"
     )
     assert short_slug_discovery_topic(mqtt, "codex", MetricKind.USAGE_PERCENT) == (
         "homeassistant/sensor/codex_usage/config"
     )
-    assert discovery_topic(mqtt, "codex", MetricKind.STATUS) == (
-        "homeassistant/sensor/modeldeck_codex_status/config"
+    assert discovery_topic(mqtt, "codex", "default", MetricKind.STATUS) == (
+        "homeassistant/sensor/modeldeck_codex_default_status/config"
     )
-    assert homeassistant_entity_id("codex", MetricKind.STATUS) == "sensor.modeldeck_codex_status"
+    assert homeassistant_entity_id("codex", "default", MetricKind.STATUS) == (
+        "sensor.modeldeck_codex_default_status"
+    )
 
 
 @pytest.mark.asyncio

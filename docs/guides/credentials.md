@@ -1,5 +1,51 @@
 # Provider credentials
 
+## Multi-account (v0.2+)
+
+ModelDeck supports **multiple accounts per provider**. Each account gets its own MQTT device
+and sensors (e.g. `sensor.modeldeck_claude_work_usage_percent`).
+
+### HAOS: add accounts via the Ingress web UI
+
+Open **Settings → Add-ons → ModelDeck → Open Web UI** (port 8099).
+
+1. Click **Add Account**.
+2. Choose provider and enter a label.
+3. **Claude / Codex:** click the authorize URL → log in → paste back the code. ModelDeck
+   exchanges the code for tokens and saves them.
+4. **Cursor:** paste your JWT (`eyJ...`) or session cookie.
+5. Click **Verify** to confirm status.
+
+The web UI session is independent of your local CLI login. **Logging out of Claude CLI or
+Codex CLI on your PC does not affect accounts added via the web UI.**
+
+### CLI / Docker: add accounts with `modeldeck login`
+
+```bash
+modeldeck login --provider claude --label "Work Claude"
+# Prints authorize URL; paste back code when prompted.
+
+modeldeck login --provider codex --label "Main Codex"
+
+modeldeck accounts list
+modeldeck accounts remove --provider claude --account work_claude
+modeldeck accounts disable --provider cursor --account default
+```
+
+Tokens are saved to `config/secrets.yaml` under `providers.{provider}.{account_id}`.
+
+### Persistent credentials (survives CLI logout)
+
+For HAOS users: create provider accounts via the web UI wizard. The wizard creates its own
+OAuth session — logging out your normal PC CLI session will not revoke HAOS tokens.
+
+For Docker users: use `modeldeck login` on a machine with a dedicated credential folder (see
+the "Isolated credentials" section below) and mount it into the container.
+
+---
+
+## Single-account mode (legacy / simple setup)
+
 ModelDeck does **not** log you in. You authenticate once in a browser or CLI, copy tokens or cookies into `config/secrets.yaml`, and ModelDeck reuses them on each poll.
 
 ## Choose the right auth mode
@@ -237,6 +283,7 @@ Docker: ensure `./config` is bind-mounted read-write (default in `templates/dock
 
 | Symptom | Fix |
 |---------|-----|
+| Entity IDs changed to `..._default_...` | Expected after upgrading to v0.2+. Old topics retired automatically; update dashboards. |
 | Codex `api` fails with 401 | Use `sk-admin-*` key, not `sk-proj-*` |
 | Claude 403 (cookie) | Copy all 4 cookies incl. `cf_clearance` and `device_id`; in Docker, run on the browser's host/IP; check `cf_clearance_present`/`device_id_present` in verify output |
 | Claude `auto` picks wrong mode | Set `auth_mode` explicitly (`cookie` or `oauth`). `auto` prefers OAuth when `access_token`/`refresh_token` are present, then cookie when `session_token`/`org_id` are present |

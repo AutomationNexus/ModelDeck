@@ -79,9 +79,21 @@ For full parity with Codex-style sensors (plan + 5h reset more often), use **coo
 
 \*Auto/API when the API returns `autoPercentUsed` / `apiPercentUsed`. Plan on personal when `planName` is returned.
 
-## Entity ID migration (v0.1.5+)
+## Entity ID format (multi-account, v0.2+)
 
-**Current (v0.1.5 and later):** `sensor.modeldeck_{provider}_{metric}` — for example `sensor.modeldeck_codex_usage_percent`, `sensor.modeldeck_claude_status`.
+**Current (v0.2+):** `sensor.modeldeck_{provider}_{account}_{metric}` — for example
+`sensor.modeldeck_codex_default_usage_percent`, `sensor.modeldeck_claude_work_status`.
+
+The `{account}` segment is the account slug chosen when adding an account. The static add-on
+options use `default`. Extra accounts added via the web UI use the slug derived from the
+account label (e.g. "Work Claude" → `work_claude`).
+
+**Previous (v0.1.5–v0.1.x):** `sensor.modeldeck_{provider}_{metric}` (no account segment).
+These are retired automatically on first startup in v0.2+.
+
+## Entity ID migration (v0.1.5–v0.1.x only)
+
+**Current (v0.1.5 and later, before v0.2):** `sensor.modeldeck_{provider}_{metric}` — for example `sensor.modeldeck_codex_usage_percent`, `sensor.modeldeck_claude_status`.
 
 **Historical (v0.1.0–v0.1.4 only):** short slugs such as `sensor.codex_usage`, `sensor.codex_collector_status`. These were retired in v0.1.5.
 

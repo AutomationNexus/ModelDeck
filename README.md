@@ -23,11 +23,29 @@
 
 See [sensors.md](docs/guides/sensors.md) for the full sensor matrix.
 
+## Breaking change: entity IDs in v0.1.x+
+
+Entity IDs now include an account slug:
+
+```
+sensor.modeldeck_{provider}_{account}_{metric}
+```
+
+Example: `sensor.modeldeck_claude_default_usage_percent`. The `default` account is used when
+configuring through the add-on static options or a single secrets block. Existing dashboards
+referencing `sensor.modeldeck_{provider}_{metric}` must be updated. Old MQTT topics are
+retired automatically on first startup.
+
 ## How it works
 
-1. You paste provider tokens or cookies (from a browser or CLI on any PC).
-2. ModelDeck polls each enabled provider on a schedule (default 5 minutes).
-3. Sensors appear in Home Assistant via MQTT Discovery — for example `sensor.modeldeck_codex_usage_percent`, `sensor.modeldeck_claude_usage_weekly_percent`, `sensor.modeldeck_codex_status`.
+1. Add provider accounts via the HAOS Ingress web UI or CLI login wizard (Claude/Codex), or
+   paste tokens/cookies directly into the add-on Configuration tab or `secrets.yaml`.
+2. ModelDeck polls each enabled provider account on a schedule (default 5 minutes).
+3. Sensors appear in Home Assistant via MQTT Discovery — for example
+   `sensor.modeldeck_codex_default_usage_percent`,
+   `sensor.modeldeck_claude_default_status`.
+
+Each account gets its own HA device: **OpenAI Codex (default)**, **Claude (default)**, etc.
 
 ModelDeck does **not** log you in. Copy credentials once; the service reuses them on each poll. OAuth-based modes can auto-refresh tokens when configured.
 
@@ -53,7 +71,19 @@ Full walkthrough: [ModelDeck-HAOS](https://github.com/automationnexus/ModelDeck-
 
 ## Getting credentials (all three providers)
 
-Pick the auth mode that matches **how you pay**, then copy the listed values into `config/secrets.yaml` (Docker) or the add-on **Configuration** tab (HAOS).
+### HAOS: use the Ingress web UI (recommended)
+
+Open **Settings → Add-ons → ModelDeck → Open Web UI** and follow the login wizard. No manual
+token copying needed for Claude or Codex. Cursor still requires a token paste.
+
+For isolated, logout-proof credentials: the wizard creates its own OAuth session per account.
+Logging out of Claude CLI or Codex CLI on your PC will not affect HAOS accounts that were
+authenticated through the web UI.
+
+### Docker / CLI: copy tokens manually
+
+Pick the auth mode that matches **how you pay**, then copy the listed values into
+`config/secrets.yaml` (Docker) or the add-on **Configuration** tab (HAOS).
 
 ### OpenAI Codex
 

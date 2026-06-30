@@ -187,14 +187,21 @@ def cmd_credentials_verify(args: argparse.Namespace) -> int:
         resolve_cursor_secrets,
     )
     from modeldeck.collectors.base import build_collectors
-    from modeldeck.config.loader import ProviderSecrets, ProviderToggle, load_config
+    from modeldeck.config.loader import ProviderAccount, ProviderSecrets, load_config
 
     provider = args.provider
     config, secrets = load_config()
-    provider_secrets = secrets.providers.get(provider, ProviderSecrets())
 
-    toggle_data = config.providers.model_dump().get(provider, {})
-    toggle = ProviderToggle.model_validate(toggle_data)
+    accounts_data = config.providers.model_dump().get(provider, [])
+    if not accounts_data:
+        account_data: dict = {
+            "id": "default", "enabled": False, "auth_mode": "auto", "credential_path": None
+        }
+    else:
+        account_data = accounts_data[0]
+    toggle = ProviderAccount.model_validate(account_data)
+    account_secrets_map = secrets.providers.get(provider, {})
+    provider_secrets = account_secrets_map.get(toggle.id, ProviderSecrets())
     resolvers = {
         "codex": (resolve_codex_secrets, pick_codex_mode),
         "claude": (resolve_claude_secrets, pick_claude_mode),

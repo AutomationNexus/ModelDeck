@@ -17,6 +17,7 @@ from modeldeck.mqtt.discovery import (
     build_discovery_payload,
     discovery_topic,
     homeassistant_entity_id,
+    legacy_single_account_discovery_topic,
     short_slug_discovery_topic,
     state_topic,
 )
@@ -40,9 +41,10 @@ class MqttBridge:
     def __init__(self, mqtt: MqttConfig) -> None:
         self._mqtt = mqtt
         self._connected = False
-        self._last_success: dict[str, Any] = {}
-        self._published_metrics: dict[str, set[MetricKind]] = {}
+        self._last_success: dict[tuple[str, str], Any] = {}
+        self._published_metrics: dict[tuple[str, str], set[MetricKind]] = {}
         self._short_slug_retired: set[str] = set()
+        self._legacy_retired: set[str] = set()
         self._client: aiomqtt.Client | None = None
 
     @property
@@ -154,6 +156,19 @@ class MqttBridge:
             await client.publish(topic, payload="", qos=0, retain=True)
         self._short_slug_retired.add(provider_id)
 
+    async def _retire_legacy_single_account_discovery(
+        self,
+        client: aiomqtt.Client,
+        provider_id: str,
+    ) -> None:
+        """Clear pre-multi-account (no account_id) discovery topics once per provider."""
+        if provider_id in self._legacy_retired:
+            return
+        for metric in MetricKind:
+            topic = legacy_single_account_discovery_topic(self._mqtt, provider_id, metric)
+            await client.publish(topic, payload="", qos=0, retain=True)
+        self._legacy_retired.add(provider_id)
+
     async def _publish_discovery(
         self,
         client: aiomqtt.Client,
@@ -162,16 +177,21 @@ class MqttBridge:
         snapshot = item.snapshot
         current = set(item.metrics)
         provider_id = snapshot.provider_id
+        account_id = snapshot.account_id
+        key = (provider_id, account_id)
+
         await self._retire_short_slug_discovery(client, provider_id)
-        previous = self._published_metrics.get(provider_id, set())
+        await self._retire_legacy_single_account_discovery(client, provider_id)
+
+        previous = self._published_metrics.get(key, set())
         retire = (set(MetricKind) - current) if not previous else previous - current
         for metric in retire:
-            topic = discovery_topic(self._mqtt, provider_id, metric)
+            topic = discovery_topic(self._mqtt, provider_id, account_id, metric)
             await client.publish(topic, payload="", qos=0, retain=True)
         for metric in item.metrics:
-            topic = discovery_topic(self._mqtt, provider_id, metric)
+            topic = discovery_topic(self._mqtt, provider_id, account_id, metric)
             payload = build_discovery_payload(self._mqtt, snapshot, metric)
-            entity_id = homeassistant_entity_id(provider_id, metric)
+            entity_id = homeassistant_entity_id(provider_id, account_id, metric)
             logger.info("MQTT discovery %s (%s)", entity_id, topic)
             await client.publish(
                 topic,
@@ -179,7 +199,7 @@ class MqttBridge:
                 qos=0,
                 retain=True,
             )
-        self._published_metrics[provider_id] = current
+        self._published_metrics[key] = current
 
     async def _publish_states(
         self,
@@ -187,22 +207,38 @@ class MqttBridge:
         item: SnapshotPublish,
     ) -> None:
         snapshot = item.snapshot
+        key = (snapshot.provider_id, snapshot.account_id)
         if snapshot.status == CollectorStatus.OK:
-            self._last_success[snapshot.provider_id] = snapshot.collected_at
-        last_ok = self._last_success.get(snapshot.provider_id)
+            self._last_success[key] = snapshot.collected_at
+        last_ok = self._last_success.get(key)
         for metric in item.metrics:
             value = format_metric_value(snapshot, metric, last_success=last_ok)
             if value is None and metric != MetricKind.STATUS:
                 continue
             if value is None:
                 value = snapshot.status.value
-            topic = state_topic(self._mqtt, snapshot.provider_id, metric)
+            topic = state_topic(self._mqtt, snapshot.provider_id, snapshot.account_id, metric)
             await client.publish(
                 topic,
                 payload=value,
                 qos=1,
                 retain=True,
             )
+
+    async def retire_account(self, provider_id: str, account_id: str) -> None:
+        """Publish empty retained payloads to remove all sensors for an account."""
+        try:
+            client = await self._session()
+            for metric in MetricKind:
+                topic = discovery_topic(self._mqtt, provider_id, account_id, metric)
+                await client.publish(topic, payload="", qos=0, retain=True)
+                s_topic = state_topic(self._mqtt, provider_id, account_id, metric)
+                await client.publish(s_topic, payload="", qos=0, retain=True)
+            key = (provider_id, account_id)
+            self._published_metrics.pop(key, None)
+            self._last_success.pop(key, None)
+        except aiomqtt.MqttError as exc:
+            raise MqttError(str(exc)) from exc
 
     async def set_offline(self) -> None:
         """Publish bridge offline status (best-effort)."""

@@ -50,7 +50,7 @@ def test_merge_secrets_repairs_invalid_provider_blocks():
         },
         reset=False,
     )
-    assert merged["providers"]["claude"]["session_token"] == "new-session"
+    assert merged["providers"]["claude"]["default"]["session_token"] == "new-session"
     assert "codex" not in merged["providers"]
 
 
@@ -85,7 +85,7 @@ def test_merge_secrets_repairs_non_dict_current_block():
         {"providers": {"codex": {"api_key": "sk-admin-2"}}},
         reset=False,
     )
-    assert merged["providers"]["codex"]["api_key"] == "sk-admin-2"
+    assert merged["providers"]["codex"]["default"]["api_key"] == "sk-admin-2"
 
 
 def test_build_config_dict_defaults():
@@ -169,7 +169,7 @@ def test_build_secrets_from_nested_options():
         }
     )
     assert secrets["mqtt"]["password"] == "mqtt-secret"
-    assert secrets["providers"]["codex"]["access_token"] == "codex-at"
+    assert secrets["providers"]["codex"]["default"]["access_token"] == "codex-at"
     SecretsConfig.model_validate(secrets)
 
 
@@ -191,7 +191,7 @@ def test_render_addon_config_writes_files(tmp_path):
     assert sec_path.exists()
     config = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
     assert config["mqtt"]["host"] == "broker.local"
-    assert config["providers"]["codex"]["enabled"] is True
+    assert config["providers"]["codex"][0]["enabled"] is True
 
 
 def test_render_preserves_refreshed_oauth_tokens(tmp_path):
@@ -226,8 +226,8 @@ def test_render_preserves_refreshed_oauth_tokens(tmp_path):
     }
     render_addon_config(options, config_dir)
     raw = yaml.safe_load(secrets_file.read_text(encoding="utf-8"))
-    assert raw["providers"]["codex"]["access_token"] == "refreshed-on-disk"
-    assert raw["providers"]["codex"]["refresh_token"] == "refresh-disk"
+    assert raw["providers"]["codex"]["default"]["access_token"] == "refreshed-on-disk"
+    assert raw["providers"]["codex"]["default"]["refresh_token"] == "refresh-disk"
 
 
 def test_render_reset_secrets_overwrites(tmp_path):
@@ -248,7 +248,7 @@ def test_render_reset_secrets_overwrites(tmp_path):
     }
     render_addon_config(options, config_dir)
     raw = yaml.safe_load(secrets_file.read_text(encoding="utf-8"))
-    assert raw["providers"]["codex"]["access_token"] == "new-from-ui"
+    assert raw["providers"]["codex"]["default"]["access_token"] == "new-from-ui"
 
 
 def test_merge_updates_mqtt_password_from_ui(tmp_path):
@@ -308,7 +308,7 @@ def test_merge_adds_new_provider_fields(tmp_path):
         config_dir,
     )
     raw = yaml.safe_load(secrets_file.read_text(encoding="utf-8"))
-    claude = raw["providers"]["claude"]
+    claude = raw["providers"]["claude"]["default"]
     assert claude["access_token"] == "keep-oauth"
     assert claude["session_token"] == "new-session"
     assert claude["org_id"] == "org-99"

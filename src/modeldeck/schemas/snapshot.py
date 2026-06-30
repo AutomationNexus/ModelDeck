@@ -40,12 +40,14 @@ DEFAULT_METRICS: tuple[MetricKind, ...] = tuple(MetricKind)
 
 @dataclass(slots=True)
 class ProviderSnapshot:
-    """Normalized quota reading for one provider."""
+    """Normalized quota reading for one provider account."""
 
     provider_id: str
     display_name: str
     collected_at: datetime
     status: CollectorStatus
+    account_id: str = "default"
+    account_label: str = ""
     usage_percent: float | None = None
     usage_used: float | None = None
     usage_limit: float | None = None

@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from modeldeck.cli.credentials_cmd import register_credentials_commands
+from modeldeck.cli.login_cmd import register_login_commands
 from modeldeck.collectors.base import build_collectors
 from modeldeck.collectors.metrics import effective_metrics
 from modeldeck.config.addon_bootstrap import load_options_file, render_addon_config
@@ -17,6 +18,7 @@ from modeldeck.mqtt.client import MqttBridge, SnapshotPublish
 from modeldeck.service.runner import run_service
 from modeldeck.service.scheduler import CollectionRunner
 from modeldeck.service.state_cache import StateCache
+from modeldeck.webui.server import register_webui_command
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -55,6 +57,8 @@ def main(argv: list[str] | None = None) -> int:
     disc_pub.set_defaults(func=_cmd_discovery_publish)
 
     register_credentials_commands(sub)
+    register_login_commands(sub)
+    register_webui_command(sub)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

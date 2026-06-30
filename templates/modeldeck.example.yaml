@@ -19,11 +19,14 @@ providers:
   mock:
     enabled: false
   codex:
-    enabled: true
-    auth_mode: subscription
+    - id: default
+      enabled: true
+      auth_mode: subscription
   claude:
-    enabled: true
-    auth_mode: cookie
+    - id: default
+      enabled: true
+      auth_mode: cookie
   cursor:
-    enabled: true
-    auth_mode: personal
+    - id: default
+      enabled: true
+      auth_mode: personal

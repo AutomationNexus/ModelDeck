@@ -19,7 +19,7 @@ cards:
       - type: vertical-stack
         cards:
           - type: gauge
-            entity: sensor.modeldeck_codex_usage_percent
+            entity: sensor.modeldeck_codex_default_usage_percent
             name: Codex
             min: 0
             max: 100
@@ -29,7 +29,7 @@ cards:
               yellow: 70
               red: 90
           - type: gauge
-            entity: sensor.modeldeck_codex_usage_weekly_percent
+            entity: sensor.modeldeck_codex_default_usage_weekly_percent
             name: Codex Weekly
             min: 0
             max: 100
@@ -41,7 +41,7 @@ cards:
       - type: vertical-stack
         cards:
           - type: gauge
-            entity: sensor.modeldeck_claude_usage_percent
+            entity: sensor.modeldeck_claude_default_usage_percent
             name: Claude 5h
             min: 0
             max: 100
@@ -51,7 +51,7 @@ cards:
               yellow: 70
               red: 90
           - type: gauge
-            entity: sensor.modeldeck_claude_usage_weekly_percent
+            entity: sensor.modeldeck_claude_default_usage_weekly_percent
             name: Claude Weekly
             min: 0
             max: 100
@@ -63,7 +63,7 @@ cards:
       - type: vertical-stack
         cards:
           - type: gauge
-            entity: sensor.modeldeck_cursor_usage_percent
+            entity: sensor.modeldeck_cursor_default_usage_percent
             name: Cursor
             min: 0
             max: 100
@@ -73,7 +73,7 @@ cards:
               yellow: 70
               red: 90
           - type: gauge
-            entity: sensor.modeldeck_cursor_usage_auto_percent
+            entity: sensor.modeldeck_cursor_default_usage_auto_percent
             name: Cursor Auto
             min: 0
             max: 100
@@ -92,9 +92,9 @@ cards:
             --primary-text-color: #f44336;
           }
     entities:
-      - entity: sensor.modeldeck_codex_status
+      - entity: sensor.modeldeck_codex_default_status
         name: Codex
-      - entity: sensor.modeldeck_claude_status
+      - entity: sensor.modeldeck_claude_default_status
         name: Claude
-      - entity: sensor.modeldeck_cursor_status
+      - entity: sensor.modeldeck_cursor_default_status
         name: Cursor

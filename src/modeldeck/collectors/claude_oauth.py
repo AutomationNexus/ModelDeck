@@ -27,10 +27,12 @@ class ClaudeOAuthCollector:
         secrets: ProviderSecrets,
         display_name: str,
         client: httpx.AsyncClient | None = None,
+        account_id: str = "default",
     ) -> None:
         self._secrets = secrets
         self._display_name = display_name
         self._client = client
+        self._account_id = account_id
 
     def _enrich_snapshot(self, snapshot: ProviderSnapshot) -> ProviderSnapshot:
         if not snapshot.plan_name and self._secrets.subscription_tier.strip():
@@ -116,7 +118,9 @@ class ClaudeOAuthCollector:
                     self._secrets.refresh_token = refresh
                 from modeldeck.config.secrets_writer import persist_provider_oauth_tokens
 
-                persist_provider_oauth_tokens("claude", self._secrets)
+                persist_provider_oauth_tokens(
+                    "claude", self._secrets, self._account_id
+                )
                 return True
         except httpx.HTTPError:
             logger.warning("Claude token refresh failed")

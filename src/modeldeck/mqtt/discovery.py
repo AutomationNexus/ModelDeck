@@ -90,14 +90,14 @@ METRIC_OBJECT_SLUG: dict[MetricKind, str] = {
 }
 
 
-def metric_unique_id(provider_id: str, metric: MetricKind) -> str:
+def metric_unique_id(provider_id: str, account_id: str, metric: MetricKind) -> str:
     """Return a globally unique MQTT discovery identifier."""
-    return f"modeldeck_{provider_id}_{metric.value}"
+    return f"modeldeck_{provider_id}_{account_id}_{metric.value}"
 
 
-def discovery_object_id(provider_id: str, metric: MetricKind) -> str:
+def discovery_object_id(provider_id: str, account_id: str, metric: MetricKind) -> str:
     """Return the HA discovery topic object_id (becomes entity_id)."""
-    return f"modeldeck_{provider_id}_{metric.value}"
+    return f"modeldeck_{provider_id}_{account_id}_{metric.value}"
 
 
 def short_slug_discovery_topic(mqtt: MqttConfig, provider_id: str, metric: MetricKind) -> str:
@@ -106,20 +106,40 @@ def short_slug_discovery_topic(mqtt: MqttConfig, provider_id: str, metric: Metri
     return f"{mqtt.discovery_prefix}/sensor/{object_id}/config"
 
 
-def discovery_topic(mqtt: MqttConfig, provider_id: str, metric: MetricKind) -> str:
+def legacy_single_account_discovery_topic(
+    mqtt: MqttConfig,
+    provider_id: str,
+    metric: MetricKind,
+) -> str:
+    """Return the pre-multi-account discovery topic (no account_id) for retirement."""
+    old_object_id = f"modeldeck_{provider_id}_{metric.value}"
+    return f"{mqtt.discovery_prefix}/sensor/{old_object_id}/config"
+
+
+def discovery_topic(
+    mqtt: MqttConfig,
+    provider_id: str,
+    account_id: str,
+    metric: MetricKind,
+) -> str:
     """Return the HA discovery config topic."""
-    object_id = discovery_object_id(provider_id, metric)
+    object_id = discovery_object_id(provider_id, account_id, metric)
     return f"{mqtt.discovery_prefix}/sensor/{object_id}/config"
 
 
-def homeassistant_entity_id(provider_id: str, metric: MetricKind) -> str:
+def homeassistant_entity_id(provider_id: str, account_id: str, metric: MetricKind) -> str:
     """Return the Home Assistant entity_id for a metric."""
-    return f"sensor.{discovery_object_id(provider_id, metric)}"
+    return f"sensor.{discovery_object_id(provider_id, account_id, metric)}"
 
 
-def state_topic(mqtt: MqttConfig, provider_id: str, metric: MetricKind) -> str:
+def state_topic(
+    mqtt: MqttConfig,
+    provider_id: str,
+    account_id: str,
+    metric: MetricKind,
+) -> str:
     """Return the MQTT state topic for a metric."""
-    return f"{mqtt.topic_prefix}/{provider_id}/{metric.value}/state"
+    return f"{mqtt.topic_prefix}/{provider_id}/{account_id}/{metric.value}/state"
 
 
 def bridge_status_topic(mqtt: MqttConfig) -> str:
@@ -134,17 +154,19 @@ def build_discovery_payload(
 ) -> dict[str, Any]:
     """Build a Home Assistant MQTT discovery payload."""
     meta = METRIC_META[metric]
-    object_id = discovery_object_id(snapshot.provider_id, metric)
-    unique_id = metric_unique_id(snapshot.provider_id, metric)
+    provider_id = snapshot.provider_id
+    account_id = snapshot.account_id
+    object_id = discovery_object_id(provider_id, account_id, metric)
+    unique_id = metric_unique_id(provider_id, account_id, metric)
     payload: dict[str, Any] = {
         "name": meta["name_suffix"],
         "unique_id": unique_id,
         "object_id": object_id,
-        "default_entity_id": homeassistant_entity_id(snapshot.provider_id, metric),
-        "state_topic": state_topic(mqtt, snapshot.provider_id, metric),
+        "default_entity_id": homeassistant_entity_id(provider_id, account_id, metric),
+        "state_topic": state_topic(mqtt, provider_id, account_id, metric),
         "device": {
-            "identifiers": [f"modeldeck_{snapshot.provider_id}"],
-            "name": snapshot.display_name,
+            "identifiers": [f"modeldeck_{provider_id}_{account_id}"],
+            "name": snapshot.account_label or snapshot.display_name,
             "manufacturer": "ModelDeck",
             "model": "AI Quota Monitor",
         },
