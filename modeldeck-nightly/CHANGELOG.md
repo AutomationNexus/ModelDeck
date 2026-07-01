@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.0.7-nightly.20260701.3] - 2026-07-01
+
+Nightly image published from dev.
+
+- Parent SHA: `b1bddd62a236`
+
+## [0.0.7-nightly.20260701.2] - 2026-07-01
+
+Nightly image published from dev.
+
+- Parent SHA: `2f80cf054ed7`
+
+## [0.0.7-nightly.20260701.1] - 2026-07-01
+
+Nightly image published from dev.
+
+- Parent SHA: `6b9d394f5f8d`
+
 ## [0.0.7-nightly.20260701] - 2026-07-01
 
 Automated nightly roll from parent dev build.
