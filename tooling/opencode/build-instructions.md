@@ -23,9 +23,10 @@ service (`src/`) and the Home Assistant add-ons (`modeldeck/` stable channel,
 5. Stop on the first failed gate.
 6. Push the feature branch and open a PR to `dev` (never push directly to `dev` or `main`).
 7. For app releases, run `/md-release` only after explicit user approval.
-8. For add-on-only changes with no app release involved (row 4 of the versioning model —
-   see `project-rules.md`), the stable promote fires automatically once the PR merges; no
-   manual release step is needed.
+8. For add-on-only changes with no app release involved (event 4 of the versioning cascade —
+   see `project-rules.md`), the promote fires automatically once the PR merges; content lands
+   on `main` immediately but the version string does not change (no packaging-rev bump exists) —
+   existing installed users see it at the next real release. No manual release step needed.
 
 Escalate to `@md-opus-solver` only for hard cross-module conflicts. `/mdh-sync-schema` for
 add-on options drift. Follow `.opencode/project-rules.md` for secrets and QA. Use the compact

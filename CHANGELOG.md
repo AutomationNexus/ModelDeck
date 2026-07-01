@@ -2,6 +2,19 @@
 
 All notable changes are documented here.
 
+## [Unreleased] - Stable add-on versioning simplified
+
+### Changed
+
+- The `modeldeck/` (stable channel) add-on version is now always exactly the parent release
+  version (bare `X.Y.Z`), with no packaging-revision suffix. An add-on-only packaging change
+  (no parent release) still lands on `main` immediately for new installs, but no longer bumps
+  the version — existing installed users see it bundled at the next real release. Test
+  add-on-only changes via the nightly channel first.
+- Removed the now-unneeded `stable-packaging-rev`/`promote-stable-bump-if-needed` logic from
+  `tools/bump_haos_version.py` (nightly-roll only remains) and the `stable-packaging-bump`
+  job from `promote-dev-to-main.yml`.
+
 ## [Unreleased] - HA add-on repo merge
 
 ### Changed

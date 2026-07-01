@@ -2,6 +2,13 @@ name: Promote dev to main
 
 on:
   workflow_dispatch:
+  # Fires automatically when a modeldeck/ change lands on dev — most commonly the
+  # sync-addon-stable PR (part of release.yml) syncing the stable pin after a release.
+  # There is no version-bump job here: stable add-on version is always exactly the
+  # parent release version (see tools/sync_haos_addon.py); an add-on-only content
+  # change (no parent release) still auto-promotes so new installs get it immediately,
+  # it just doesn't bump the version — existing installed users see it at the next
+  # real release, bundled.
   push:
     branches: [dev]
     paths:
@@ -17,107 +24,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  stable-packaging-bump:
-    name: Bump stable packaging rev on dev (if needed)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Mint CI-Bot token
-        id: bot-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.CI_BOT_APP_ID }}
-          private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
-
-      - uses: actions/checkout@v6
-        with:
-          ref: dev
-          fetch-depth: 0
-          token: ${{ steps.bot-token.outputs.token }}
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Bump stable .A on dev if modeldeck/ changed without a new parent pin
-        id: bump
-        env:
-          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          MAIN_SHA=$(git rev-parse origin/main)
-          pip install pyyaml -q
-          NEW=$(python tools/bump_haos_version.py promote-stable-bump-if-needed --old-main "${MAIN_SHA}")
-          echo "result=${NEW}"
-          if [ "${NEW}" = "skip" ]; then
-            echo "No HAOS-only stable packaging change detected on dev — nothing to bump."
-            echo "bumped=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # dev is a ruleset-protected branch — GitHub rejects a direct `git push` outright
-          # ("Changes must be made through a pull request"), even from the CI-Bot App with
-          # bypass_mode: always. That bypass covers required-check overrides on PR merges,
-          # not the pull_request-required rule itself. So: branch + PR + merge, same pattern
-          # as every other automated write in this repo.
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          BRANCH="chore/stable-packaging-bump-${NEW}"
-          git checkout -b "${BRANCH}"
-          git add modeldeck/config.yaml modeldeck/CHANGELOG.md
-          git commit -m "chore(addon): bump stable packaging rev to ${NEW}"
-          git push origin "${BRANCH}"
-          echo "bumped=true" >> "$GITHUB_OUTPUT"
-
-          gh pr create --repo "${REPO}" --base dev --head "${BRANCH}" \
-            --title "chore(addon): bump stable packaging rev to ${NEW}" \
-            --body "Automated stable packaging revision bump — modeldeck/ changed but the parent image pin did not."
-          PR=$(gh pr list --repo "${REPO}" --base dev --head "${BRANCH}" --state open --json number --jq '.[0].number')
-          echo "Opened PR #${PR} — waiting for its CI..."
-          sleep 15
-          for _ in $(seq 1 60); do
-            run="$(gh run list --repo "${REPO}" --workflow ci.yml --branch "${BRANCH}" --limit 5 \
-                    --json headSha,status,conclusion \
-                    --jq "[.[] | select(.status != null)][0]")"
-            st="$(printf '%s' "${run}" | jq -r '.status // "none"')"
-            cc="$(printf '%s' "${run}" | jq -r '.conclusion // "none"')"
-            echo "  PR CI: status=${st} conclusion=${cc}"
-            if [ "${st}" = "completed" ]; then
-              [ "${cc}" = "success" ] && break
-              echo "::error::PR CI not green (${cc})"; exit 1
-            fi
-            sleep 15
-          done
-          gh pr merge "${PR}" --repo "${REPO}" --merge --delete-branch
-          echo "Merged stable packaging bump PR #${PR}."
-
-          # The merge itself is a push to dev, which re-triggers ci.yml. The shared promote
-          # workflow's "Require green dev CI" check looks at dev's *latest* run, so wait
-          # here until that post-merge run is green before letting the promote job start.
-          merge_sha=$(gh api "repos/${REPO}/pulls/${PR}" --jq '.merge_commit_sha')
-          echo "Waiting for post-merge CI on dev (commit ${merge_sha})..."
-          for _ in $(seq 1 60); do
-            run="$(gh run list --repo "${REPO}" --workflow ci.yml --branch dev --limit 5 \
-                    --json headSha,status,conclusion \
-                    --jq "[.[] | select(.headSha == \"${merge_sha}\")][0]")"
-            st="$(printf '%s' "${run}" | jq -r '.status // "none"')"
-            cc="$(printf '%s' "${run}" | jq -r '.conclusion // "none"')"
-            echo "  dev CI: status=${st} conclusion=${cc}"
-            if [ "${st}" = "completed" ]; then
-              [ "${cc}" = "success" ] && break
-              echo "::error::dev CI failed for the packaging-bump merge commit (${cc})"; exit 1
-            fi
-            sleep 15
-          done
-
   promote:
     name: Promote dev to main
-    needs: stable-packaging-bump
     uses: automationnexus/.github/.github/workflows/promote-dev-to-main.yml@v1
     with:
       runner-labels: '["ubuntu-latest"]'
+      # main is the sole owner of the nightly-channel add-on pointer files (the nightly
+      # publish pathway writes them directly to main); a plain dev->main merge would
+      # otherwise regress them to dev's stale copy.
       exclude-paths: |
         modeldeck-nightly/config.yaml
         modeldeck-nightly/CHANGELOG.md

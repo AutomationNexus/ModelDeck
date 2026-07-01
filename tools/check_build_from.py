@@ -13,7 +13,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_FROM_RE = re.compile(r"^ARG\s+BUILD_FROM=(.+)$", re.MULTILINE)
-STABLE_VERSION_RE = re.compile(r"^(\d+\.\d+\.\d+)(?:\.(\d+))?$")
+STABLE_VERSION_RE = re.compile(r"^(\d+\.\d+\.\d+)$")
 NIGHTLY_VERSION_RE = re.compile(r"^(\d+\.\d+\.\d+)-nightly\.\d{8}(?:\.\d+)?$")
 SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
@@ -108,7 +108,7 @@ def check_addon_build_from(addon_dir: Path) -> list[str]:
         stable_match = STABLE_VERSION_RE.match(version)
         if not stable_match:
             errors.append(
-                f"{folder} stable version must match X.Y.Z.R, got {version!r}"
+                f"{folder} stable version must match bare X.Y.Z, got {version!r}"
             )
             return errors
         parent_semver = stable_match.group(1)
