@@ -30,6 +30,9 @@ class ProviderOAuthSpec:
     token_encoding: str = "json"
     # Extra key=value pairs appended to the authorization URL query string.
     extra_authorize_params: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    # When True, include the state parameter in the token exchange request body.
+    # Required by Claude's token endpoint; not used by standard OAuth2 providers.
+    token_exchange_includes_state: bool = False
 
     def env(self, key: str, default: str) -> str:
         """Return an env-overridden value for this provider's protocol field."""
@@ -70,6 +73,19 @@ class ProviderOAuthSpec:
         return self.env("TOKEN_ENCODING", self.token_encoding)
 
     @property
+    def effective_token_exchange_includes_state(self) -> bool:
+        """Whether to include state in token exchange body.
+
+        Overridable via MODELDECK_{PROVIDER}_OAUTH_TOKEN_INCLUDES_STATE (1/true/yes).
+        """
+        env_val = self.env("TOKEN_INCLUDES_STATE", "")
+        if env_val.strip().lower() in {"1", "true", "yes"}:
+            return True
+        if env_val.strip().lower() in {"0", "false", "no"}:
+            return False
+        return self.token_exchange_includes_state
+
+    @property
     def effective_extra_authorize_params(self) -> tuple[tuple[str, str], ...]:
         """Extra authorize params; individual values are env-overridable."""
         result = []
@@ -103,6 +119,8 @@ CLAUDE_SPEC = ProviderOAuthSpec(
     # for the user to copy and paste back into the ModelDeck web UI.
     redirect_uri="https://console.anthropic.com/oauth/code/callback",
     token_encoding="json",
+    # Claude's token endpoint requires the state parameter from the authorize step.
+    token_exchange_includes_state=True,
 )
 
 # ---------------------------------------------------------------------------

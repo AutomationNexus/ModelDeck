@@ -258,11 +258,11 @@ class TestOAuthCompleteCodex:
         start = client.post("/accounts/codex/default/oauth/start").json()
         session_key = start["session_key"]
 
-        async def fake_exchange(spec, code, verifier, *, client=None):
+        async def fake_exchange(spec, code, verifier, *, state=None, client=None):
             return {"access_token": "at", "refresh_token": "rt"}
 
         monkeypatch.setattr(webui_app, "exchange_code", fake_exchange)
-        monkeypatch.setattr(webui_app, "extract_code_from_redirect", lambda x: "code123")
+        monkeypatch.setattr(webui_app, "parse_code_and_state", lambda x: ("code123", None))
         monkeypatch.setattr(webui_app, "extract_codex_account_id", lambda x: None)
 
         resp = client.post(
@@ -291,11 +291,11 @@ class TestOAuthCompleteCodex:
 
         id_token = _make_id_token({"chatgpt_account_id": "user-test-999"})
 
-        async def fake_exchange(spec, code, verifier, *, client=None):
+        async def fake_exchange(spec, code, verifier, *, state=None, client=None):
             return {"access_token": "at", "refresh_token": "rt", "id_token": id_token}
 
         monkeypatch.setattr(webui_app, "exchange_code", fake_exchange)
-        monkeypatch.setattr(webui_app, "extract_code_from_redirect", lambda x: "code123")
+        monkeypatch.setattr(webui_app, "parse_code_and_state", lambda x: ("code123", None))
 
         resp = client.post(
             "/accounts/codex/default/oauth/complete",
@@ -320,11 +320,11 @@ class TestOAuthCompleteCodex:
         start = client.post("/accounts/claude/default/oauth/start").json()
         session_key = start["session_key"]
 
-        async def fake_exchange(spec, code, verifier, *, client=None):
+        async def fake_exchange(spec, code, verifier, *, state=None, client=None):
             return {"access_token": "at", "refresh_token": "rt"}
 
         monkeypatch.setattr(webui_app, "exchange_code", fake_exchange)
-        monkeypatch.setattr(webui_app, "extract_code_from_redirect", lambda x: "code123")
+        monkeypatch.setattr(webui_app, "parse_code_and_state", lambda x: ("code123", None))
 
         resp = client.post(
             "/accounts/claude/default/oauth/complete",

@@ -31,16 +31,25 @@ from modeldeck.auth.oauth_flow import (
     OAuthFlowError,
     build_authorize_url,
     exchange_code,
-    extract_code_from_redirect,
     extract_codex_account_id,
     generate_state,
     generate_verifier,
+    parse_code_and_state,
 )
 from modeldeck.auth.provider_specs import get_spec, supported_oauth_providers
+from modeldeck.collectors.metrics import base_metrics
 from modeldeck.config.loader import ProviderAccount, load_config, slugify
-from modeldeck.config.secrets_writer import write_account_secrets
+from modeldeck.config.secrets_writer import move_account_secrets, write_account_secrets
 from modeldeck.core.logging import get_logger
 from modeldeck.core.paths import config_path
+from modeldeck.mqtt.discovery import (
+    METRIC_META,
+    bridge_status_topic,
+    discovery_object_id,
+    discovery_topic,
+    homeassistant_entity_id,
+    state_topic,
+)
 
 logger = get_logger(__name__)
 
@@ -257,6 +266,13 @@ class OAuthCompleteRequest(BaseModel):
     code_or_redirect: str
 
 
+class RenameAccountRequest(BaseModel):
+    """Rename an account label; optionally update the entity ID slug."""
+
+    label: str
+    update_entity_id: bool = False
+
+
 class PasteTokenRequest(BaseModel):
     """Paste a credential field for a provider account."""
 
@@ -397,8 +413,8 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="Provider not OAuth-capable.")
 
         try:
-            code = extract_code_from_redirect(body.code_or_redirect)
-            tokens = await exchange_code(spec, code, session["verifier"])
+            code, state = parse_code_and_state(body.code_or_redirect)
+            tokens = await exchange_code(spec, code, session["verifier"], state=state)
         except OAuthFlowError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -625,6 +641,101 @@ def create_app() -> FastAPI:
         return JSONResponse({"status": "ok", "enabled": bool(enabled)})
 
     # -----------------------------------------------------------------------
+    # POST /accounts/{provider}/{account_id}/rename
+    # Rename account label; optionally regenerate the entity-ID slug.
+    #
+    # update_entity_id=false (default, recommended):
+    #   Only the label is updated.  entity_id / unique_id remain stable;
+    #   friendly name in HA updates on next service restart.
+    #
+    # update_entity_id=true:
+    #   New slug is derived from the new label.  Config id, secrets block,
+    #   and MQTT topics all move to the new slug on next service restart.
+    #   ⚠ HA history and automations referencing the old entity_id break.
+    # -----------------------------------------------------------------------
+
+    @app.post("/accounts/{provider}/{account_id}/rename")
+    async def rename_account(
+        provider: str, account_id: str, body: RenameAccountRequest
+    ) -> JSONResponse:
+        """Rename an account label, optionally updating the HA entity ID slug."""
+        if provider not in _PROVIDERS:
+            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+
+        new_label = body.label.strip()
+        if not new_label:
+            raise HTTPException(status_code=400, detail="Label must not be empty.")
+
+        cfg_path = config_path()
+        if not cfg_path.exists():
+            raise HTTPException(status_code=404, detail="Config not found.")
+
+        raw: dict[str, Any] = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+        accounts: list[Any] = raw.get("providers", {}).get(provider, [])
+        target = next(
+            (a for a in accounts if isinstance(a, dict) and a.get("id") == account_id),
+            None,
+        )
+        if target is None:
+            raise HTTPException(
+                status_code=404, detail=f"Account {account_id} not found."
+            )
+
+        if not body.update_entity_id:
+            # Label-only rename — slug / entity_id stays stable.
+            target["label"] = new_label
+            raw["providers"][provider] = accounts
+            cfg_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+            logger.info("Renamed %s/%s label -> %r", provider, account_id, new_label)
+            return JSONResponse({
+                "status": "ok",
+                "account_id": account_id,
+                "label": new_label,
+                "entity_id_changed": False,
+            })
+
+        # Entity-ID rename: derive new slug, check collisions.
+        existing_ids = {
+            a.get("id") for a in accounts
+            if isinstance(a, dict) and a.get("id") != account_id
+        }
+        new_id = slugify(new_label, existing_ids)
+
+        if new_id == account_id:
+            # Slug unchanged (e.g. label was "My Acc" → "My Acc !" → same slug).
+            target["label"] = new_label
+            raw["providers"][provider] = accounts
+            cfg_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+            logger.info(
+                "Renamed %s/%s label only (slug unchanged) -> %r",
+                provider, account_id, new_label,
+            )
+            return JSONResponse({
+                "status": "ok",
+                "account_id": new_id,
+                "label": new_label,
+                "entity_id_changed": False,
+            })
+
+        # Slug changed — migrate config id and secrets block.
+        target["id"] = new_id
+        target["label"] = new_label
+        raw["providers"][provider] = accounts
+        cfg_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+
+        move_account_secrets(provider, account_id, new_id)
+
+        logger.info(
+            "Renamed %s/%s -> %s (entity-id updated)", provider, account_id, new_id
+        )
+        return JSONResponse({
+            "status": "ok",
+            "account_id": new_id,
+            "label": new_label,
+            "entity_id_changed": True,
+        })
+
+    # -----------------------------------------------------------------------
     # POST /accounts/{provider}/{account_id}/switch-oauth
     # Switch an existing account to OAuth mode and start the OAuth wizard.
     # Returns the same payload as oauth/start so the UI can immediately show
@@ -697,6 +808,66 @@ def create_app() -> FastAPI:
     async def list_providers() -> JSONResponse:
         """Return provider metadata including per-mode required credential fields."""
         return JSONResponse({"providers": list(_PROVIDER_META.values())})
+
+    # -----------------------------------------------------------------------
+    # GET /accounts/{provider}/{account_id}/entities
+    # Return entity IDs and MQTT topics for an account (static derivation;
+    # no network or MQTT connection needed).  Lists the candidate metric set
+    # for the account's auth_mode — actual HA entities are the populated
+    # subset (effective_metrics) which depends on the provider response.
+    # -----------------------------------------------------------------------
+
+    @app.get("/accounts/{provider}/{account_id}/entities")
+    async def account_entities(provider: str, account_id: str) -> JSONResponse:
+        """Return entity IDs and MQTT topics for an account."""
+        if provider not in _PROVIDERS:
+            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+
+        try:
+            config, _ = load_config()
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Config error: {exc}") from exc
+
+        accounts = getattr(config.providers, provider, [])
+        account = next(
+            (a for a in accounts if isinstance(a, ProviderAccount) and a.id == account_id),
+            None,
+        )
+        if account is None:
+            raise HTTPException(
+                status_code=404, detail=f"Account {provider}/{account_id} not found."
+            )
+
+        mqtt = config.mqtt
+        auth_mode = account.auth_mode if account.auth_mode != "auto" else (
+            "subscription" if provider == "codex" else
+            "oauth" if provider == "claude" else
+            "personal"
+        )
+        candidates = base_metrics(provider, auth_mode)
+
+        entities = []
+        for metric in candidates:
+            meta = METRIC_META.get(metric, {})
+            entities.append({
+                "metric": metric.value,
+                "name": meta.get("name_suffix", metric.value),
+                "entity_id": homeassistant_entity_id(provider, account_id, metric),
+                "object_id": discovery_object_id(provider, account_id, metric),
+                "state_topic": state_topic(mqtt, provider, account_id, metric),
+                "discovery_topic": discovery_topic(mqtt, provider, account_id, metric),
+            })
+
+        return JSONResponse({
+            "provider": provider,
+            "account_id": account_id,
+            "label": account.label or account_id,
+            "device_id": f"modeldeck_{provider}_{account_id}",
+            "topic_prefix": mqtt.topic_prefix,
+            "discovery_prefix": mqtt.discovery_prefix,
+            "availability_topic": bridge_status_topic(mqtt),
+            "entities": entities,
+        })
 
     return app
 

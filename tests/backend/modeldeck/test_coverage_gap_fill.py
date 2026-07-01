@@ -195,7 +195,7 @@ def test_webui_oauth_complete_no_tokens(monkeypatch, tmp_path):
         return {}
 
     monkeypatch.setattr(webui_app, "exchange_code", empty_exchange)
-    monkeypatch.setattr(webui_app, "extract_code_from_redirect", lambda x: x)
+    monkeypatch.setattr(webui_app, "parse_code_and_state", lambda x: (x, None))
     resp = client.post(
         "/accounts/claude/default/oauth/complete",
         json={"session_key": session_key, "code_or_redirect": "code"},

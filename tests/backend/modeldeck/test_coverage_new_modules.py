@@ -219,11 +219,11 @@ def test_webui_oauth_complete_success(webui_client, monkeypatch):
     session_key = start["session_key"]
 
     # Mock exchange_code to return tokens.
-    async def fake_exchange(spec, code, verifier, *, client=None):
+    async def fake_exchange(spec, code, verifier, *, state=None, client=None):
         return {"access_token": "at", "refresh_token": "rt"}
 
     monkeypatch.setattr(webui_app, "exchange_code", fake_exchange)
-    monkeypatch.setattr(webui_app, "extract_code_from_redirect", lambda x: "code123")
+    monkeypatch.setattr(webui_app, "parse_code_and_state", lambda x: ("code123", None))
 
     resp = webui_client.post(
         "/accounts/claude/default/oauth/complete",
@@ -242,11 +242,11 @@ def test_webui_oauth_complete_exchange_error(webui_client, monkeypatch):
     start = webui_client.post("/accounts/claude/default/oauth/start").json()
     session_key = start["session_key"]
 
-    async def fake_exchange(spec, code, verifier, *, client=None):
+    async def fake_exchange(spec, code, verifier, *, state=None, client=None):
         raise OAuthFlowError("bad code")
 
     monkeypatch.setattr(webui_app, "exchange_code", fake_exchange)
-    monkeypatch.setattr(webui_app, "extract_code_from_redirect", lambda x: "code123")
+    monkeypatch.setattr(webui_app, "parse_code_and_state", lambda x: ("code123", None))
 
     resp = webui_client.post(
         "/accounts/claude/default/oauth/complete",

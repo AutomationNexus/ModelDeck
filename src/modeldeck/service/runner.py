@@ -10,6 +10,7 @@ from modeldeck.config.loader import check_secrets_permissions, load_config
 from modeldeck.core.exceptions import MqttError
 from modeldeck.core.logging import get_logger, setup_logging
 from modeldeck.mqtt.client import MqttBridge
+from modeldeck.service.reload import ConfigWatcher, _active_keys
 from modeldeck.service.scheduler import CollectionRunner
 from modeldeck.service.state_cache import StateCache
 
@@ -39,6 +40,7 @@ async def run_service() -> None:
     collectors = build_collectors(config, secrets)
     if not collectors:
         logger.warning("No enabled collectors — service will idle until configuration changes")
+    initial_keys = _active_keys(config)
     mqtt = MqttBridge(config.mqtt)
     try:
         await mqtt.connect()
@@ -50,7 +52,11 @@ async def run_service() -> None:
         mqtt=mqtt,
         cache=cache,
         retain_state=config.service.retain_state,
+        active_keys=initial_keys,
     )
+    # Store the watcher on the runner so run_loop can access it without
+    # breaking existing tests that monkeypatch run_loop with a simple stub.
+    runner._config_watcher = ConfigWatcher()  # type: ignore[attr-defined]
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
     try:

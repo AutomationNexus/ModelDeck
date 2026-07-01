@@ -10,9 +10,9 @@ from modeldeck.auth.oauth_flow import (
     OAuthFlowError,
     build_authorize_url,
     exchange_code,
-    extract_code_from_redirect,
     generate_state,
     generate_verifier,
+    parse_code_and_state,
 )
 from modeldeck.auth.provider_specs import get_spec, supported_oauth_providers
 from modeldeck.config.loader import ProviderAccount, load_config, slugify
@@ -59,14 +59,14 @@ async def _run_oauth_login(provider: str, label: str, account_id: str) -> int:
         return 1
 
     try:
-        code = extract_code_from_redirect(raw)
+        code, parsed_state = parse_code_and_state(raw)
     except OAuthFlowError as exc:
         print(f"Error: {exc}")
         return 1
 
     print("Exchanging code for tokens...")
     try:
-        tokens = await exchange_code(spec, code, verifier)
+        tokens = await exchange_code(spec, code, verifier, state=parsed_state)
     except OAuthFlowError as exc:
         print(f"Error: token exchange failed — {exc}")
         return 1

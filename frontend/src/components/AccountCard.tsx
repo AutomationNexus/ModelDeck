@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Account } from "../api/types";
+import type { Account, AccountEntitiesResponse } from "../api/types";
 import type { ProviderMeta } from "../api/types";
 import {
   verifyAccount,
@@ -9,6 +9,8 @@ import {
   completeOAuth,
   pasteToken,
   switchToOAuth,
+  renameAccount,
+  fetchAccountEntities,
 } from "../api/accounts";
 import { ApiError } from "../api/client";
 import { ProviderIcon } from "./ProviderIcon";
@@ -22,7 +24,7 @@ interface Props {
   onError: (msg: string) => void;
 }
 
-type Modal = "none" | "delete" | "paste" | "oauth";
+type Modal = "none" | "delete" | "paste" | "oauth" | "rename" | "entities";
 
 export function AccountCard({ account, providers, onRefresh, onSuccess, onError }: Props) {
   const { provider, id, label, enabled, auth_mode } = account;
@@ -46,6 +48,17 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
   const [pasteValues, setPasteValues] = useState<Record<string, string>>({});
   const [pasteBusy, setPasteBusy] = useState(false);
   const [pasteErr, setPasteErr] = useState("");
+
+  // Rename state
+  const [renameLabel, setRenameLabel] = useState(label || id);
+  const [renameUpdateId, setRenameUpdateId] = useState(false);
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameErr, setRenameErr] = useState("");
+
+  // Entities modal state
+  const [entitiesData, setEntitiesData] = useState<AccountEntitiesResponse | null>(null);
+  const [entitiesLoading, setEntitiesLoading] = useState(false);
+  const [entitiesErr, setEntitiesErr] = useState("");
 
   async function handleVerify() {
     setBusy(true);
@@ -169,6 +182,46 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
     }
   }
 
+  async function handleRename() {
+    const trimmed = renameLabel.trim();
+    if (!trimmed) { setRenameErr("Label must not be empty."); return; }
+    setRenameBusy(true);
+    setRenameErr("");
+    try {
+      const res = await renameAccount(provider, id, trimmed, renameUpdateId);
+      setModal("none");
+      onSuccess(
+        res.entity_id_changed
+          ? `Renamed to "${res.label}". Entity ID updated — restart service to apply MQTT changes.`
+          : `Renamed to "${res.label}". Restart service to update the HA friendly name.`,
+      );
+      onRefresh();
+    } catch (e) {
+      setRenameErr(e instanceof ApiError ? e.detail : String(e));
+    } finally {
+      setRenameBusy(false);
+    }
+  }
+
+  async function handleOpenEntities() {
+    setEntitiesErr("");
+    setEntitiesLoading(true);
+    setEntitiesData(null);
+    setModal("entities");
+    try {
+      const data = await fetchAccountEntities(provider, id);
+      setEntitiesData(data);
+    } catch (e) {
+      setEntitiesErr(e instanceof ApiError ? e.detail : String(e));
+    } finally {
+      setEntitiesLoading(false);
+    }
+  }
+
+  function copyToClipboard(text: string) {
+    navigator.clipboard.writeText(text).catch(() => {/* ignore */});
+  }
+
   return (
     <>
       <div className="card account-card">
@@ -239,6 +292,15 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
           )}
           <button className="btn btn-secondary" onClick={() => { setPasteErr(""); setModal("paste"); }}>
             Paste credentials
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => { setRenameLabel(label || id); setRenameUpdateId(false); setRenameErr(""); setModal("rename"); }}
+          >
+            Rename
+          </button>
+          <button className="btn btn-secondary" onClick={handleOpenEntities}>
+            View entities
           </button>
           <button
             className="btn btn-danger"
@@ -342,6 +404,131 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
               <button className="btn btn-primary" disabled={oauthBusy} onClick={handleCompleteOAuth}>
                 {oauthBusy ? "Completing…" : "Complete login"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Rename modal */}
+      {modal === "rename" && (
+        <div className="overlay" onClick={() => setModal("none")}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Rename account — {label || id}</span>
+              <button className="btn btn-ghost btn-icon" onClick={() => setModal("none")}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label">New label</label>
+                <input
+                  type="text"
+                  value={renameLabel}
+                  onChange={(e) => setRenameLabel(e.target.value)}
+                  autoComplete="off"
+                  autoFocus
+                />
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", marginTop: "12px" }}>
+                <input
+                  id={`rename-update-id-${id}`}
+                  type="checkbox"
+                  checked={renameUpdateId}
+                  onChange={(e) => setRenameUpdateId(e.target.checked)}
+                  style={{ marginTop: "3px", flexShrink: 0 }}
+                />
+                <label htmlFor={`rename-update-id-${id}`} style={{ fontSize: "0.83rem", lineHeight: 1.5, cursor: "pointer" }}>
+                  <strong>Update Home Assistant entity ID</strong>
+                  <br />
+                  <span style={{ color: "var(--text-secondary)", fontSize: "0.78rem" }}>
+                    Off (recommended): entity_id stays stable — HA history and automations preserved.
+                    The friendly name updates on the next service restart.
+                    <br />
+                    On: entity_id is regenerated from the new label. ⚠ HA history and any automations
+                    or dashboards referencing the old entity_id will break.
+                  </span>
+                </label>
+              </div>
+              {renameErr && <p className="text-danger" style={{ fontSize: "0.82rem", marginTop: "8px" }}>{renameErr}</p>}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModal("none")}>Cancel</button>
+              <button className="btn btn-primary" disabled={renameBusy} onClick={handleRename}>
+                {renameBusy ? "Renaming…" : "Rename"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Entities modal */}
+      {modal === "entities" && (
+        <div className="overlay" onClick={() => setModal("none")}>
+          <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Entity IDs &amp; MQTT topics — {label || id}</span>
+              <button className="btn btn-ghost btn-icon" onClick={() => setModal("none")}>×</button>
+            </div>
+            <div className="modal-body">
+              {entitiesLoading && <p className="text-muted">Loading…</p>}
+              {entitiesErr && <p className="text-danger">{entitiesErr}</p>}
+              {entitiesData && (
+                <>
+                  <div style={{ marginBottom: "12px", fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+                    <span style={{ marginRight: "16px" }}>
+                      <strong>Device ID:</strong>{" "}
+                      <code>{entitiesData.device_id}</code>
+                      <button className="btn btn-ghost btn-icon" style={{ padding: "0 4px", fontSize: "0.75rem" }}
+                        onClick={() => copyToClipboard(entitiesData.device_id)} title="Copy">⧉</button>
+                    </span>
+                    <span>
+                      <strong>Availability:</strong>{" "}
+                      <code>{entitiesData.availability_topic}</code>
+                      <button className="btn btn-ghost btn-icon" style={{ padding: "0 4px", fontSize: "0.75rem" }}
+                        onClick={() => copyToClipboard(entitiesData.availability_topic)} title="Copy">⧉</button>
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", marginBottom: "8px" }}>
+                    Showing candidate entities for auth mode <strong>{entitiesData.entities.length > 0 ? provider : "—"}</strong>.
+                    An entity only appears in HA once the collector returns a value for it.
+                  </p>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", fontSize: "0.78rem", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                          <th style={{ textAlign: "left", padding: "4px 8px" }}>Metric</th>
+                          <th style={{ textAlign: "left", padding: "4px 8px" }}>Entity ID</th>
+                          <th style={{ textAlign: "left", padding: "4px 8px" }}>State topic</th>
+                          <th style={{ textAlign: "left", padding: "4px 8px" }}>Discovery topic</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {entitiesData.entities.map((e) => (
+                          <tr key={e.metric} style={{ borderBottom: "1px solid var(--border-dim)" }}>
+                            <td style={{ padding: "4px 8px", whiteSpace: "nowrap" }}>{e.name}</td>
+                            <td style={{ padding: "4px 8px" }}>
+                              <code style={{ fontSize: "0.74rem" }}>{e.entity_id}</code>
+                              <button className="btn btn-ghost btn-icon" style={{ padding: "0 4px", fontSize: "0.72rem" }}
+                                onClick={() => copyToClipboard(e.entity_id)} title="Copy entity ID">⧉</button>
+                            </td>
+                            <td style={{ padding: "4px 8px" }}>
+                              <code style={{ fontSize: "0.74rem" }}>{e.state_topic}</code>
+                              <button className="btn btn-ghost btn-icon" style={{ padding: "0 4px", fontSize: "0.72rem" }}
+                                onClick={() => copyToClipboard(e.state_topic)} title="Copy state topic">⧉</button>
+                            </td>
+                            <td style={{ padding: "4px 8px" }}>
+                              <code style={{ fontSize: "0.74rem" }}>{e.discovery_topic}</code>
+                              <button className="btn btn-ghost btn-icon" style={{ padding: "0 4px", fontSize: "0.72rem" }}
+                                onClick={() => copyToClipboard(e.discovery_topic)} title="Copy discovery topic">⧉</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModal("none")}>Close</button>
             </div>
           </div>
         </div>

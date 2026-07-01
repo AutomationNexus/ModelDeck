@@ -113,6 +113,7 @@ async def exchange_code(
     code: str,
     verifier: str,
     *,
+    state: str | None = None,
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
     """Exchange an authorization code for access and refresh tokens.
@@ -123,8 +124,14 @@ async def exchange_code(
         Provider OAuth spec.
     code:
         Authorization code returned by the provider (user pastes this).
+        May contain a trailing ``#state`` fragment — it is stripped here
+        so the bare code is sent to the token endpoint.
     verifier:
         The PKCE verifier used when building the authorize URL.
+    state:
+        The OAuth state value.  Required by some providers (e.g. Claude)
+        in the token exchange body.  Ignored when
+        ``spec.effective_token_exchange_includes_state`` is False.
     client:
         Optional httpx client (for testing).
 
@@ -140,13 +147,19 @@ async def exchange_code(
     OAuthFlowError
         If the exchange fails (HTTP error or missing access_token).
     """
-    body = {
+    # Defensively strip a bare CODE#STATE that callers may not have split.
+    clean_code, embedded_state = parse_code_and_state(code) if "#" in code else (code.strip(), None)
+    effective_state = state or embedded_state
+
+    body: dict[str, str] = {
         "grant_type": "authorization_code",
-        "code": code.strip(),
+        "code": clean_code,
         "redirect_uri": spec.effective_redirect_uri,
         "client_id": spec.effective_client_id,
         "code_verifier": verifier,
     }
+    if spec.effective_token_exchange_includes_state and effective_state:
+        body["state"] = effective_state
     return await _post_token(spec, body, client=client)
 
 
@@ -298,81 +311,105 @@ async def _post_token(
     return payload
 
 
-def extract_code_from_redirect(redirect_url: str) -> str:  # noqa: C901
-    """Extract the authorization code from whatever the user pasted.
+def parse_code_and_state(raw: str) -> tuple[str, str | None]:  # noqa: C901
+    """Parse an authorization code (and optional state) from whatever the user pasted.
 
-    Designed to be forgiving: accepts any of the following without the user
-    having to understand the OAuth flow:
+    Handles all forms a user might paste from their browser:
 
-    * Full redirect URL with ``http``/``https`` scheme:
-        ``http://localhost:1455/auth/callback?code=abc&state=xyz``
-        ``https://console.anthropic.com/oauth/code/callback?code=abc``
-    * Code in URL fragment (some providers put params after ``#``):
-        ``https://example.com/callback#code=abc&state=xyz``
-    * Scheme-less URL pasted from the address bar:
-        ``localhost:1455/auth/callback?code=abc&state=xyz``
-    * Bare ``code=VALUE`` param string (user copies just that part):
-        ``code=ac_rpcQfsO0Dgx80xz9zG2an3FCMGl``
-    * Bare authorization code (no prefix, no URL):
-        ``ac_rpcQfsO0Dgx80xz9zG2an3FCMGl``
+    * Full URL with scheme: ``http://localhost:1455/auth/callback?code=abc&state=xyz``
+    * Full URL (Claude console): ``https://console.anthropic.com/…?code=abc&state=xyz``
+    * Code in URL fragment: ``https://example.com/callback#code=abc&state=xyz``
+    * Scheme-less URL: ``localhost:1455/auth/callback?code=abc&state=xyz``
+    * Bare ``code=VALUE`` param: ``code=ac_abc123``
+    * Bare ``CODE#STATE`` (Claude console display format): ``ac_abc123#randomstate``
+    * Bare authorization code: ``ac_abc123``
 
-    Surrounding whitespace, angle-brackets (``<url>``), and straight or
-    curly quotes are stripped before processing.
+    Returns
+    -------
+    (code, state)
+        ``code`` is the authorization code (never empty).
+        ``state`` is the state value or ``None`` when not present.
 
-    Paste-back usage note
-    ---------------------
-    For Codex the redirect goes to ``http://localhost:1455/auth/callback``
-    which is the user's *browser machine* localhost — not the add-on host —
-    so that page fails to load.  The user copies the entire URL from the
-    address bar and pastes it here; this function extracts the ``code=``
-    value automatically.
-
-    For Claude the redirect goes to
-    ``https://console.anthropic.com/oauth/code/callback`` which renders and
-    displays the code.  The user can paste either the full page URL or the
-    code value shown on that page.
+    Raises
+    ------
+    OAuthFlowError
+        When no code can be extracted.
     """
     # Strip surrounding whitespace and common wrapping characters.
-    stripped = redirect_url.strip().strip("<>\"'\u2018\u2019\u201c\u201d")
+    stripped = raw.strip().strip("<>\"'\u2018\u2019\u201c\u201d")
 
-    # --- bare "code=VALUE" param (no URL, no scheme) ---
-    if stripped.lower().startswith("code="):
-        code = stripped[5:].split("&")[0].strip()
-        if code:
-            return code
+    if not stripped:
         raise OAuthFlowError(
-            "No value found after 'code=' — paste the full URL from your "
-            "browser's address bar."
+            "Nothing to parse — paste the full URL from your browser's address bar "
+            "or the authorization code shown on the provider's page."
         )
 
+    # --- bare "code=VALUE[&state=…]" param (no URL, no scheme) ---
+    if stripped.lower().startswith("code="):
+        rest = stripped[5:]
+        parts = rest.split("&", 1)
+        code = parts[0].strip()
+        if not code:
+            raise OAuthFlowError(
+                "No value found after 'code=' — paste the full URL from your "
+                "browser's address bar."
+            )
+        state: str | None = None
+        if len(parts) > 1:
+            for param in parts[1].split("&"):
+                if param.lower().startswith("state="):
+                    state = param[6:].strip() or None
+                    break
+        return code, state
+
     # --- URL-shaped input (with or without scheme) ---
-    # Normalise scheme-less URLs so urlparse can handle them.
     parse_target = stripped
     if not stripped.lower().startswith(("http://", "https://")):
-        # Heuristic: contains a slash and a query string → looks like a URL.
+        # Scheme-less URL heuristic: has a path separator and a query string.
         if "/" in stripped and "?" in stripped:
             parse_target = "https://" + stripped
 
     if parse_target.lower().startswith(("http://", "https://")):
         parsed = urllib.parse.urlparse(parse_target)
-
-        # Check query string first, then fragment (some providers use #code=).
+        # Check query string first, then fragment (some providers put params after #).
         for source in (parsed.query, parsed.fragment):
             params = urllib.parse.parse_qs(source)
-            code = params.get("code", [""])[0].strip()
-            if code:
-                return code
-
+            code_list = params.get("code", [])
+            if code_list and code_list[0].strip():
+                code = code_list[0].strip()
+                state_list = params.get("state", [])
+                state = state_list[0].strip() if state_list else None
+                return code, state or None
         raise OAuthFlowError(
             "No 'code' parameter found in the URL. "
             "Copy the entire address-bar URL from your browser and paste it here."
         )
 
-    # --- bare code (no URL, no prefix) ---
-    if stripped:
-        return stripped
+    # --- bare CODE#STATE (Claude console displays code#state on the page) ---
+    if "#" in stripped:
+        code_part, _, state_part = stripped.partition("#")
+        code_part = code_part.strip()
+        state_part = state_part.strip()
+        if code_part:
+            return code_part, state_part or None
+        raise OAuthFlowError(
+            "Could not extract a code from the pasted value. "
+            "Copy the entire URL or just the code from the provider's page."
+        )
 
-    raise OAuthFlowError(
-        "Nothing to parse — paste the full URL from your browser's address bar "
-        "or the authorization code shown on the provider's page."
-    )
+    # --- bare code (no URL, no prefix, no fragment) ---
+    return stripped, None
+
+
+def extract_code_from_redirect(redirect_url: str) -> str:
+    """Extract the authorization code from whatever the user pasted.
+
+    Thin wrapper around :func:`parse_code_and_state` that returns only the
+    code.  Accepts the same input formats — full URL, scheme-less URL,
+    ``code=VALUE``, bare ``CODE#STATE``, or bare code.
+
+    For providers that require the state value in the token exchange (e.g.
+    Claude), use :func:`parse_code_and_state` directly.
+    """
+    code, _ = parse_code_and_state(redirect_url)
+    return code
