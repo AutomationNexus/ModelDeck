@@ -18,6 +18,11 @@ jobs:
     with:
       branch-model: main-dev
       runner-labels: '["ubuntu-latest"]'
+      # This repo also ships the HA add-on folders (modeldeck/, modeldeck-nightly/); their
+      # pointer bumps are published to main via a sync/publish-main-* branch (see nightly.yml
+      # and release.yml), which needs to be an allowed PR source into main.
+      main-source-allow-glob: 'sync/publish-main-*'
+      has-addon-validate: true
       node-version: "24"
       has-frontend: true
       has-e2e: true

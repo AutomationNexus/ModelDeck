@@ -2,6 +2,18 @@
 
 All notable changes are documented here.
 
+## [Unreleased] - HA add-on repo merge
+
+### Changed
+
+- The `ModelDeck-HAOS` Home Assistant add-on repository has been merged into this repo.
+  `modeldeck/` (stable channel) and `modeldeck-nightly/` (nightly channel) now live here;
+  HA users should point their add-on store repository URL at
+  `https://github.com/automationnexus/ModelDeck` instead of `ModelDeck-HAOS`.
+- Prior `ModelDeck-HAOS` repo-level history: `0.0.1` (2026-06-19) — initial Home Assistant
+  OS Supervisor add-on for ModelDeck, add-on repository with Configuration UI for MQTT and
+  provider credentials, CI validation for add-on metadata and pinned `BUILD_FROM` image tag.
+
 ## [Unreleased] - Claude OAuth fix, account rename, live reload, entity viewer
 
 ### Fixed
@@ -228,7 +240,7 @@ All notable changes are documented here.
 ### Changed
 
 - Fresh repository history; Docker-only install path in this repo
-- HAOS Supervisor add-on moved to [ModelDeck-HAOS](https://github.com/automationnexus/ModelDeck-HAOS)
+- HAOS Supervisor add-on moved to a dedicated `ModelDeck-HAOS` repo (later merged back into this repo — see `[Unreleased] - HA add-on repo merge` above)
 
 ### Added
 

@@ -61,13 +61,13 @@ Edit `config/modeldeck.yaml` (providers, auth modes) and `config/secrets.yaml` (
 
 ## Home Assistant OS add-on
 
-Install ModelDeck on HAOS via the dedicated add-on repository:
+Install ModelDeck on HAOS directly from this repository — it's also a Home Assistant add-on repository (`modeldeck/` = stable channel, `modeldeck-nightly/` = nightly channel):
 
-1. **Settings → Add-ons → Add-on store → ⋮ → Repositories** → add `https://github.com/automationnexus/ModelDeck-HAOS`
+1. **Settings → Add-ons → Add-on store → ⋮ → Repositories** → add `https://github.com/automationnexus/ModelDeck`
 2. Install **ModelDeck**, open **Configuration**, fill MQTT + provider sections, **Save**, **Start**
 3. **Settings → Devices & services → MQTT** — confirm ModelDeck devices and `sensor.modeldeck_*_status` = `ok`
 
-Full walkthrough: [ModelDeck-HAOS](https://github.com/automationnexus/ModelDeck-HAOS/blob/main/docs/getting-started/haos-addon.md)
+Full walkthrough: [docs/getting-started/haos-addon.md](docs/getting-started/haos-addon.md)
 
 ## Getting credentials (all three providers)
 
@@ -180,7 +180,7 @@ If status is `auth_error`, re-copy credentials and confirm auth mode matches you
 | Need | Document |
 |------|----------|
 | Install (Docker) | [docs/getting-started/installation.md](docs/getting-started/installation.md) |
-| Install (HAOS add-on) | [ModelDeck-HAOS](https://github.com/automationnexus/ModelDeck-HAOS) |
+| Install (HAOS add-on) | [docs/getting-started/haos-addon.md](docs/getting-started/haos-addon.md) |
 | Provider credentials | [docs/guides/credentials.md](docs/guides/credentials.md) |
 | Configure providers | [docs/admin/configuration.md](docs/admin/configuration.md) |
 | MQTT topics | [docs/guides/mqtt-topics.md](docs/guides/mqtt-topics.md) |

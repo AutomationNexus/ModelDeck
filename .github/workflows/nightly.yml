@@ -16,6 +16,7 @@ on:
 permissions:
   contents: write
   packages: write
+  pull-requests: write
 
 concurrency:
   group: nightly-${{ github.workflow }}
@@ -31,15 +32,22 @@ jobs:
       force_run: ${{ inputs.force_run || false }}
       coverage-threshold: 97
 
-  notify-haos:
-    name: Notify ModelDeck-HAOS
+  roll-nightly-addon:
+    name: Roll & publish nightly add-on pointer
     needs: nightly
     if: needs.nightly.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - name: Mint CI-Bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.CI_BOT_APP_ID }}
+          private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
+
+      - name: Checkout built dev commit
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.nightly.outputs.target_sha }}
       - name: Resolve parent version
@@ -47,20 +55,72 @@ jobs:
         run: |
           V=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           echo "v=$V" >> "$GITHUB_OUTPUT"
-      - name: Mint CI-Bot token (ModelDeck-HAOS only)
-        id: bot-token
-        uses: actions/create-github-app-token@v1
+
+      - name: Checkout main (add-on pointer lives here)
+        uses: actions/checkout@v6
         with:
-          app-id: ${{ secrets.CI_BOT_APP_ID }}
-          private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ModelDeck-HAOS
-      - name: Dispatch modeldeck-nightly-published
+          ref: main
+          token: ${{ steps.bot-token.outputs.token }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Roll nightly add-on pointer
+        id: roll
+        run: |
+          set -euo pipefail
+          pip install pyyaml -q
+          NEW=$(python tools/bump_haos_version.py nightly-roll \
+            --parent-version "${{ steps.version.outputs.v }}" \
+            --sha "${{ needs.nightly.outputs.target_sha }}" \
+            --reason "Nightly image published from dev.")
+          python tools/validate_ha_addon.py
+          echo "new_version=$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Publish pointer to main (branch + PR + CI-wait + admin-merge)
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          REPO: ${{ github.repository }}
         run: |
-          gh api repos/${{ github.repository_owner }}/ModelDeck-HAOS/dispatches \
-            -f event_type=modeldeck-nightly-published \
-            -f "client_payload[version]=${{ steps.version.outputs.v }}" \
-            -f "client_payload[sha]=${{ needs.nightly.outputs.target_sha }}"
-          echo "Notified ModelDeck-HAOS: version=${{ steps.version.outputs.v }} sha=${{ needs.nightly.outputs.target_sha }}"
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          NEW="${{ steps.roll.outputs.new_version }}"
+          BRANCH="sync/publish-main-${NEW}"
+
+          git checkout -b "${BRANCH}"
+          git add modeldeck-nightly/config.yaml modeldeck-nightly/CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "No changes to the nightly pointer — nothing to publish."; exit 0
+          fi
+          git commit -m "chore(nightly): publish modeldeck-nightly ${NEW} to store"
+          git push origin "${BRANCH}"
+
+          gh pr create --repo "${REPO}" --base main --head "${BRANCH}" \
+            --title "chore(nightly): publish modeldeck-nightly ${NEW} to store" \
+            --body "Automated publish of the nightly add-on pointer (\`modeldeck-nightly/\`) after a new :nightly image was built from dev.
+
+          - Nightly add-on version: \`${NEW}\`
+
+          CI must pass before merge."
+          PR=$(gh pr list --repo "${REPO}" --base main --head "${BRANCH}" --state open --json number --jq '.[0].number')
+          echo "Opened PR #${PR} — waiting for main CI..."
+
+          sleep 15
+          for _ in $(seq 1 60); do
+            run="$(gh run list --repo "${REPO}" --workflow ci.yml --branch "${BRANCH}" --limit 5 \
+                    --json headSha,status,conclusion \
+                    --jq "[.[] | select(.status != null)][0]")"
+            st="$(printf '%s' "${run}" | jq -r '.status // "none"')"
+            cc="$(printf '%s' "${run}" | jq -r '.conclusion // "none"')"
+            echo "  PR CI: status=${st} conclusion=${cc}"
+            if [ "${st}" = "completed" ]; then
+              [ "${cc}" = "success" ] && break
+              echo "::error::PR CI not green (${cc})"; exit 1
+            fi
+            sleep 15
+          done
+
+          # CI-Bot App is a protect-main ruleset bypass actor, so --admin lets it merge
+          # this automated publish PR.
+          gh pr merge "${PR}" --repo "${REPO}" --merge --delete-branch --admin
+          echo "Published modeldeck-nightly ${NEW} to main via PR #${PR}."
