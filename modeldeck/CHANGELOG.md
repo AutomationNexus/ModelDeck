@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.7.3] - 2026-07-01
+
+HAOS packaging update.
+
+## [0.0.7.2] - 2026-07-01
+
+HAOS packaging update.
+
+## [0.0.7.1] - 2026-07-01
+
+HAOS packaging update.
+
 All notable changes to the ModelDeck Home Assistant add-on are documented here.
 
 ## [Unreleased] - multi-account + Ingress UI
