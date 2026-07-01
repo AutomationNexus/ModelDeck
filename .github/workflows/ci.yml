@@ -18,13 +18,34 @@ jobs:
     with:
       branch-model: main-dev
       runner-labels: '["ubuntu-latest"]'
+      # This repo also ships the HA add-on folders (modeldeck/, modeldeck-nightly/); their
+      # pointer bumps are published to main via a sync/publish-main-* branch (see nightly.yml
+      # and release.yml), which needs to be an allowed PR source into main.
+      main-source-allow-glob: 'sync/publish-main-*'
+      has-addon-validate: true
+      node-version: "24"
+      has-frontend: true
+      has-e2e: true
       has-integration: true
       has-security: true
       security-paths: src/modeldeck
+      spa-artifact-path: src/modeldeck/webui/static/
       pip-install-cmd: 'python -m venv .venv && .venv/bin/pip install -e ".[dev,service]" -q'
       test-cmd: '.venv/bin/python -m pytest -m "not integration" -p no:cacheprovider --cov=src/modeldeck --cov-report=term-missing:skip-covered --cov-fail-under=97 && .venv/bin/python -m modeldeck config validate --config templates/modeldeck.example.yaml'
       integration-test-cmd: '.venv/bin/python -m pytest -m integration -v --tb=short'
       lint-paths: src tests tools
+      e2e-pip-install-cmd: 'pip install -e ".[dev,service]" -r requirements-dev-frontend.txt'
+      e2e-playwright-install-cmd: 'python -m playwright install chromium'
+      pre-e2e-cmd: |
+        if [ -f src/modeldeck/webui/static/index.html ]; then
+          echo "MODELDECK_WEBUI_HAS_SPA=1" >> "$GITHUB_ENV"
+          echo "SPA index.html found — SPA tests will run"
+        else
+          echo "SPA index.html not found — SPA tests will be skipped"
+          ls -la src/modeldeck/webui/static/ || true
+        fi
+        export MODELDECK_STATIC_DIR="$(pwd)/src/modeldeck/webui/static"
+        echo "MODELDECK_STATIC_DIR=$MODELDECK_STATIC_DIR" >> "$GITHUB_ENV"
     secrets:
       ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
       ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}

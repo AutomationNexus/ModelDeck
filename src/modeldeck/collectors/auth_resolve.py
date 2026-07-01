@@ -7,10 +7,13 @@ from pathlib import Path
 from modeldeck.collectors.credentials.claude_auth import load_claude_oauth
 from modeldeck.collectors.credentials.codex_auth import load_codex_oauth
 from modeldeck.collectors.credentials.cursor_auth import load_cursor_access_token
-from modeldeck.config.loader import ProviderSecrets, ProviderToggle
+from modeldeck.config.loader import ProviderAccount, ProviderSecrets, ProviderToggle
+
+# Both ProviderToggle and ProviderAccount expose auth_mode and credential_path.
+_ToggleLike = ProviderToggle | ProviderAccount
 
 
-def _credential_file(toggle: ProviderToggle, default: Path) -> Path | None:
+def _credential_file(toggle: _ToggleLike, default: Path) -> Path | None:
     if toggle.credential_path == "":
         return None
     if toggle.credential_path:
@@ -18,7 +21,7 @@ def _credential_file(toggle: ProviderToggle, default: Path) -> Path | None:
     return default
 
 
-def resolve_codex_secrets(toggle: ProviderToggle, secrets: ProviderSecrets) -> ProviderSecrets:
+def resolve_codex_secrets(toggle: _ToggleLike, secrets: ProviderSecrets) -> ProviderSecrets:
     """Merge Codex secrets with optional Codex CLI auth file."""
     merged = secrets.model_copy()
     path = _credential_file(toggle, Path.home() / ".codex" / "auth.json")
@@ -31,7 +34,7 @@ def resolve_codex_secrets(toggle: ProviderToggle, secrets: ProviderSecrets) -> P
     return merged
 
 
-def resolve_claude_secrets(toggle: ProviderToggle, secrets: ProviderSecrets) -> ProviderSecrets:
+def resolve_claude_secrets(toggle: _ToggleLike, secrets: ProviderSecrets) -> ProviderSecrets:
     """Merge Claude secrets with optional Claude Code credentials file."""
     merged = secrets.model_copy()
     path = _credential_file(toggle, Path.home() / ".claude" / ".credentials.json")
@@ -45,7 +48,7 @@ def resolve_claude_secrets(toggle: ProviderToggle, secrets: ProviderSecrets) -> 
     return merged
 
 
-def resolve_cursor_secrets(toggle: ProviderToggle, secrets: ProviderSecrets) -> ProviderSecrets:
+def resolve_cursor_secrets(toggle: _ToggleLike, secrets: ProviderSecrets) -> ProviderSecrets:
     """Merge Cursor secrets with optional state.vscdb access token."""
     merged = secrets.model_copy()
     if merged.access_token:
@@ -61,7 +64,7 @@ def resolve_cursor_secrets(toggle: ProviderToggle, secrets: ProviderSecrets) -> 
     return merged
 
 
-def pick_codex_mode(toggle: ProviderToggle, secrets: ProviderSecrets) -> str:
+def pick_codex_mode(toggle: _ToggleLike, secrets: ProviderSecrets) -> str:
     """Return the effective Codex auth mode."""
     mode = toggle.auth_mode
     if mode != "auto":
@@ -73,19 +76,28 @@ def pick_codex_mode(toggle: ProviderToggle, secrets: ProviderSecrets) -> str:
     return "subscription"
 
 
-def pick_claude_mode(toggle: ProviderToggle, secrets: ProviderSecrets) -> str:
-    """Return the effective Claude auth mode."""
+def pick_claude_mode(toggle: _ToggleLike, secrets: ProviderSecrets) -> str:
+    """Return the effective Claude auth mode.
+
+    Auto-resolution order (when auth_mode is 'auto'):
+    1. OAuth creds present (access_token or refresh_token) -> oauth
+    2. Cookie creds present (session_token or org_id) -> cookie
+    3. Neither -> cookie (default; prompts for credentials)
+
+    When both OAuth and cookie creds are present, OAuth takes precedence.
+    Explicit auth_mode values ('cookie', 'oauth') bypass this logic entirely.
+    """
     mode = toggle.auth_mode
     if mode != "auto":
         return mode
-    if secrets.session_token or secrets.org_id:
-        return "cookie"
     if secrets.access_token or secrets.refresh_token:
         return "oauth"
+    if secrets.session_token or secrets.org_id:
+        return "cookie"
     return "cookie"
 
 
-def pick_cursor_mode(toggle: ProviderToggle, secrets: ProviderSecrets) -> str:
+def pick_cursor_mode(toggle: _ToggleLike, secrets: ProviderSecrets) -> str:
     """Return the effective Cursor auth mode."""
     mode = toggle.auth_mode
     if mode != "auto":

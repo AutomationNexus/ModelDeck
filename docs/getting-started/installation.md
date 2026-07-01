@@ -36,11 +36,11 @@ For step-by-step token extraction (browser, CLI, HAOS), see [credentials.md](../
 
 On HAOS, install from the dedicated add-on repository instead of Docker Compose:
 
-1. Add repository `https://github.com/automationnexus/ModelDeck-HAOS` (**Settings → Add-ons → Repositories**)
+1. Add repository `https://github.com/automationnexus/ModelDeck` (**Settings → Add-ons → Repositories**)
 2. Install **ModelDeck**, configure MQTT + credentials in the **Configuration** tab
 3. Start the add-on and verify MQTT sensors
 
-Full walkthrough: [ModelDeck-HAOS](https://github.com/automationnexus/ModelDeck-HAOS/blob/main/docs/getting-started/haos-addon.md).
+Full walkthrough: [haos-addon.md](haos-addon.md).
 
 ## Local build (contributors)
 

@@ -59,7 +59,7 @@ def _expected_entity_ids() -> set[str]:
     ids: set[str] = set()
     for provider, metrics in PROVIDER_METRICS.items():
         for metric in metrics:
-            ids.add(homeassistant_entity_id(provider, metric))
+            ids.add(homeassistant_entity_id(provider, "default", metric))
     return ids
 
 
@@ -88,10 +88,12 @@ def test_dashboard_examples_use_canonical_entity_ids(yaml_name: str):
 
 def test_homeassistant_entity_ids_use_modeldeck_prefix():
     """Entity IDs must match homeassistant/sensor/modeldeck_{provider}_{metric}/config."""
-    assert homeassistant_entity_id("codex", MetricKind.USAGE_PERCENT) == (
-        "sensor.modeldeck_codex_usage_percent"
+    assert homeassistant_entity_id("codex", "default", MetricKind.USAGE_PERCENT) == (
+        "sensor.modeldeck_codex_default_usage_percent"
     )
-    assert homeassistant_entity_id("codex", MetricKind.STATUS) == "sensor.modeldeck_codex_status"
-    assert homeassistant_entity_id("cursor", MetricKind.USAGE_AUTO_PERCENT) == (
-        "sensor.modeldeck_cursor_usage_auto_percent"
+    assert homeassistant_entity_id("codex", "default", MetricKind.STATUS) == (
+        "sensor.modeldeck_codex_default_status"
+    )
+    assert homeassistant_entity_id("cursor", "default", MetricKind.USAGE_AUTO_PERCENT) == (
+        "sensor.modeldeck_cursor_default_usage_auto_percent"
     )

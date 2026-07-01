@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import stat
 from pathlib import Path
 from typing import Any
@@ -36,10 +37,20 @@ class ServiceConfig(BaseModel):
 
 
 class ProviderToggle(BaseModel):
-    """Enable flag and auth options for a provider."""
+    """Enable flag and auth options for a provider (mock only; kept for testing)."""
 
     enabled: bool = False
     account_label: str | None = None
+    auth_mode: str = "auto"
+    credential_path: str | None = None
+
+
+class ProviderAccount(BaseModel):
+    """Multi-account entry for a real provider (codex / claude / cursor)."""
+
+    id: str
+    label: str = ""
+    enabled: bool = False
     auth_mode: str = "auto"
     credential_path: str | None = None
 
@@ -48,9 +59,22 @@ class ProvidersConfig(BaseModel):
     """Per-provider enable flags."""
 
     mock: ProviderToggle = Field(default_factory=lambda: ProviderToggle(enabled=True))
-    codex: ProviderToggle = Field(default_factory=ProviderToggle)
-    claude: ProviderToggle = Field(default_factory=ProviderToggle)
-    cursor: ProviderToggle = Field(default_factory=ProviderToggle)
+    codex: list[ProviderAccount] = Field(default_factory=list)
+    claude: list[ProviderAccount] = Field(default_factory=list)
+    cursor: list[ProviderAccount] = Field(default_factory=list)
+
+    @field_validator("codex", "claude", "cursor", mode="before")
+    @classmethod
+    def _coerce_account_list(cls, v: Any) -> list:
+        """Migrate legacy single-dict format to list[ProviderAccount]."""
+        if isinstance(v, dict):
+            data = dict(v)
+            if "id" not in data:
+                data["id"] = "default"
+            return [data]
+        if isinstance(v, list):
+            return v
+        return []
 
 
 class ProviderSecrets(BaseModel):
@@ -68,11 +92,45 @@ class ProviderSecrets(BaseModel):
     subscription_tier: str = ""
 
 
+# Fields recognised as belonging to a flat ProviderSecrets block.
+_SECRETS_FIELDS: frozenset[str] = frozenset(
+    {
+        "api_key",
+        "session_token",
+        "access_token",
+        "refresh_token",
+        "account_id",
+        "org_id",
+        "device_id",
+        "cf_clearance",
+        "admin_api_key",
+        "subscription_tier",
+    }
+)
+
+
 class SecretsConfig(BaseModel):
     """Secrets loaded from secrets.yaml."""
 
     mqtt: dict[str, str] = Field(default_factory=dict)
-    providers: dict[str, ProviderSecrets] = Field(default_factory=dict)
+    providers: dict[str, dict[str, ProviderSecrets]] = Field(default_factory=dict)
+
+    @field_validator("providers", mode="before")
+    @classmethod
+    def _migrate_providers(cls, v: Any) -> dict:
+        """Migrate flat ProviderSecrets dict to nested {account_id: ProviderSecrets}."""
+        if not isinstance(v, dict):
+            return {}
+        migrated: dict[str, Any] = {}
+        for pid, block in v.items():
+            if not isinstance(block, dict):
+                continue
+            # A flat ProviderSecrets block has secret-field keys at the top level.
+            if any(k in _SECRETS_FIELDS for k in block):
+                migrated[pid] = {"default": block}
+            else:
+                migrated[pid] = block
+        return migrated
 
 
 class AppConfig(BaseModel):
@@ -89,6 +147,17 @@ class AppConfig(BaseModel):
         value.topic_prefix = value.topic_prefix.strip("/")
         value.discovery_prefix = value.discovery_prefix.strip("/")
         return value
+
+
+def slugify(label: str, existing: set[str] | None = None) -> str:
+    """Convert label to a lowercase slug; suffix with _2, _3 on collision."""
+    base = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or "account"
+    slug = base
+    n = 2
+    while existing and slug in existing:
+        slug = f"{base}_{n}"
+        n += 1
+    return slug
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:

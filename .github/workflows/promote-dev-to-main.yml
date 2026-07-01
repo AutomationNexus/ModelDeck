@@ -2,6 +2,10 @@ name: Promote dev to main
 
 on:
   workflow_dispatch:
+  push:
+    branches: [dev]
+    paths:
+      - "modeldeck/**"
 
 permissions:
   actions: write
@@ -13,10 +17,82 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  stable-packaging-bump:
+    name: Bump stable packaging rev on dev (if needed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Mint CI-Bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.CI_BOT_APP_ID }}
+          private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          ref: dev
+          fetch-depth: 0
+          token: ${{ steps.bot-token.outputs.token }}
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Bump stable .A on dev if modeldeck/ changed without a new parent pin
+        id: bump
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          MAIN_SHA=$(git rev-parse origin/main)
+          pip install pyyaml -q
+          NEW=$(python tools/bump_haos_version.py promote-stable-bump-if-needed --old-main "${MAIN_SHA}")
+          echo "result=${NEW}"
+          if [ "${NEW}" = "skip" ]; then
+            echo "No HAOS-only stable packaging change detected on dev — nothing to bump."
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add modeldeck/config.yaml modeldeck/CHANGELOG.md
+          git commit -m "chore(addon): bump stable packaging rev to ${NEW}"
+          git push origin dev
+          echo "bumped=true" >> "$GITHUB_OUTPUT"
+
+          # This direct push to dev re-triggers ci.yml for the bump commit. The shared
+          # promote workflow's "Require green dev CI" check looks at dev's *latest* run, so
+          # wait here until that new run is green before letting the promote job start —
+          # otherwise it could see the new run still in progress and fail the check.
+          head_sha=$(git rev-parse HEAD)
+          echo "Waiting for CI on dev (commit ${head_sha})..."
+          for _ in $(seq 1 60); do
+            run="$(gh run list --repo "${REPO}" --workflow ci.yml --branch dev --limit 5 \
+                    --json headSha,status,conclusion \
+                    --jq "[.[] | select(.headSha == \"${head_sha}\")][0]")"
+            st="$(printf '%s' "${run}" | jq -r '.status // "none"')"
+            cc="$(printf '%s' "${run}" | jq -r '.conclusion // "none"')"
+            echo "  dev CI: status=${st} conclusion=${cc}"
+            if [ "${st}" = "completed" ]; then
+              [ "${cc}" = "success" ] && break
+              echo "::error::dev CI failed for the packaging-bump commit (${cc})"; exit 1
+            fi
+            sleep 15
+          done
+
   promote:
+    name: Promote dev to main
+    needs: stable-packaging-bump
     uses: automationnexus/.github/.github/workflows/promote-dev-to-main.yml@v1
     with:
       runner-labels: '["ubuntu-latest"]'
+      exclude-paths: |
+        modeldeck-nightly/config.yaml
+        modeldeck-nightly/CHANGELOG.md
     secrets:
       ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
       ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}

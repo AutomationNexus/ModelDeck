@@ -10,7 +10,7 @@ from modeldeck.collectors.claude import ClaudeCollector
 from modeldeck.collectors.claude_console_parser import parse_claude_console_usage
 from modeldeck.config.loader import AppConfig, ProviderSecrets
 from modeldeck.schemas.snapshot import CollectorStatus
-from tests.conftest import no_file_toggle
+from tests.conftest import no_file_account
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 
@@ -31,8 +31,8 @@ def test_parse_claude_console_fixture():
 @pytest.mark.asyncio
 async def test_claude_collector_missing_cookie_credentials():
     """Missing session token should yield auth_error."""
-    toggle = no_file_toggle(enabled=True, auth_mode="cookie")
-    collector = ClaudeCollector(AppConfig(), ProviderSecrets(), toggle)
+    account = no_file_account(enabled=True, auth_mode="cookie")
+    collector = ClaudeCollector(AppConfig(), ProviderSecrets(), account)
     snap = await collector.collect()
     assert snap.status == CollectorStatus.AUTH_ERROR
 
@@ -48,9 +48,9 @@ async def test_claude_cookie_collector_with_mock_transport():
 
     transport = httpx.MockTransport(handler)
     client = httpx.AsyncClient(transport=transport)
-    toggle = no_file_toggle(enabled=True, auth_mode="cookie")
+    account = no_file_account(enabled=True, auth_mode="cookie")
     secrets = ProviderSecrets(session_token="session-abc", org_id="org-123")
-    collector = ClaudeCollector(AppConfig(), secrets, toggle, client=client)
+    collector = ClaudeCollector(AppConfig(), secrets, account, client=client)
     snap = await collector.collect()
     assert snap.status == CollectorStatus.OK
     assert snap.usage_percent == 42.5
@@ -66,9 +66,9 @@ async def test_claude_oauth_collector_with_mock_transport():
 
     transport = httpx.MockTransport(handler)
     client = httpx.AsyncClient(transport=transport)
-    toggle = no_file_toggle(enabled=True, auth_mode="oauth")
+    account = no_file_account(enabled=True, auth_mode="oauth")
     secrets = ProviderSecrets(access_token="oauth-token")
-    collector = ClaudeCollector(AppConfig(), secrets, toggle, client=client)
+    collector = ClaudeCollector(AppConfig(), secrets, account, client=client)
     snap = await collector.collect()
     assert snap.status == CollectorStatus.OK
     assert snap.usage_percent == 35.0
@@ -87,9 +87,9 @@ async def test_claude_cookie_sends_browser_headers():
         return httpx.Response(200, json=payload)
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    toggle = no_file_toggle(enabled=True, auth_mode="cookie")
+    account = no_file_account(enabled=True, auth_mode="cookie")
     secrets = ProviderSecrets(session_token="session-abc", org_id="org-123")
-    collector = ClaudeCollector(AppConfig(), secrets, toggle, client=client)
+    collector = ClaudeCollector(AppConfig(), secrets, account, client=client)
     snap = await collector.collect()
     assert snap.status == CollectorStatus.OK
     assert seen.get("origin") == "https://claude.ai"
@@ -105,12 +105,66 @@ async def test_claude_cookie_403_sets_hint():
         return httpx.Response(403)
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    toggle = no_file_toggle(enabled=True, auth_mode="cookie")
+    account = no_file_account(enabled=True, auth_mode="cookie")
     secrets = ProviderSecrets(session_token="session-abc", org_id="org-123")
-    collector = ClaudeCollector(AppConfig(), secrets, toggle, client=client)
+    collector = ClaudeCollector(AppConfig(), secrets, account, client=client)
     snap = await collector.collect()
     assert snap.status == CollectorStatus.AUTH_ERROR
     assert snap.raw_safe is not None
     assert snap.raw_safe.get("http_status") == 403
     assert snap.raw_safe.get("auth_mode") == "cookie"
     assert snap.raw_safe.get("hint") == "cf_clearance_expired_or_docker_ip"
+
+
+@pytest.mark.asyncio
+async def test_claude_cookie_403_presence_flags_both_absent():
+    """D2: 403 raw_safe must include cf_clearance_present and device_id_present booleans."""
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    account = no_file_account(enabled=True, auth_mode="cookie")
+    # Neither cf_clearance nor device_id supplied
+    secrets = ProviderSecrets(session_token="session-abc", org_id="org-123")
+    collector = ClaudeCollector(AppConfig(), secrets, account, client=client)
+    snap = await collector.collect()
+    assert snap.status == CollectorStatus.AUTH_ERROR
+    assert snap.raw_safe is not None
+    assert snap.raw_safe.get("cf_clearance_present") is False
+    assert snap.raw_safe.get("device_id_present") is False
+
+
+@pytest.mark.asyncio
+async def test_claude_cookie_403_presence_flags_both_present():
+    """D2: presence flags should be True when cookies are supplied."""
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    account = no_file_account(enabled=True, auth_mode="cookie")
+    secrets = ProviderSecrets(
+        session_token="session-abc",
+        org_id="org-123",
+        cf_clearance="cf-value",
+        device_id="device-value",
+    )
+    collector = ClaudeCollector(AppConfig(), secrets, account, client=client)
+    snap = await collector.collect()
+    assert snap.status == CollectorStatus.AUTH_ERROR
+    assert snap.raw_safe is not None
+    assert snap.raw_safe.get("cf_clearance_present") is True
+    assert snap.raw_safe.get("device_id_present") is True
+
+
+@pytest.mark.asyncio
+async def test_claude_collector_snapshot_carries_account_id():
+    """Snapshot returned by ClaudeCollector should carry account_id."""
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    account = no_file_account(id="work", enabled=True, auth_mode="cookie")
+    secrets = ProviderSecrets(session_token="session-abc", org_id="org-123")
+    collector = ClaudeCollector(AppConfig(), secrets, account, client=client)
+    snap = await collector.collect()
+    assert snap.account_id == "work"

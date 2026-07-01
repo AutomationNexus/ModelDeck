@@ -27,10 +27,12 @@ class ClaudeOAuthCollector:
         secrets: ProviderSecrets,
         display_name: str,
         client: httpx.AsyncClient | None = None,
+        account_id: str = "default",
     ) -> None:
         self._secrets = secrets
         self._display_name = display_name
         self._client = client
+        self._account_id = account_id
 
     def _enrich_snapshot(self, snapshot: ProviderSnapshot) -> ProviderSnapshot:
         if not snapshot.plan_name and self._secrets.subscription_tier.strip():
@@ -46,6 +48,17 @@ class ClaudeOAuthCollector:
                 CollectorStatus.AUTH_ERROR,
                 {"reason": "missing_oauth_token"},
             )
+        # D3: if only a refresh_token is stored (no access_token), pre-emptively
+        # refresh before the first usage call to avoid a guaranteed 401.
+        if not self._secrets.access_token and self._secrets.refresh_token:
+            logger.debug("Claude OAuth: no access_token present; refreshing before first call")
+            if not await self._refresh_token():
+                return error_snapshot(
+                    provider_id,
+                    self._display_name,
+                    CollectorStatus.AUTH_ERROR,
+                    {"reason": "refresh_token_exchange_failed"},
+                )
         try:
             payload = await self._fetch_usage()
             snapshot = parse_claude_oauth_usage(payload, provider_id=provider_id)
@@ -105,7 +118,9 @@ class ClaudeOAuthCollector:
                     self._secrets.refresh_token = refresh
                 from modeldeck.config.secrets_writer import persist_provider_oauth_tokens
 
-                persist_provider_oauth_tokens("claude", self._secrets)
+                persist_provider_oauth_tokens(
+                    "claude", self._secrets, self._account_id
+                )
                 return True
         except httpx.HTTPError:
             logger.warning("Claude token refresh failed")

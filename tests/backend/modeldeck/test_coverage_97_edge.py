@@ -273,7 +273,7 @@ def test_state_cache_keeps_existing_on_failed_update(tmp_path):
         status=CollectorStatus.AUTH_ERROR,
     )
     cache.save([bad])
-    loaded = cache.load()["mock"]
+    loaded = cache.load()["mock/default"]
     assert loaded.usage_percent == 10.0
 
 
@@ -288,7 +288,7 @@ def test_state_cache_stores_first_failed_snapshot(tmp_path):
         status=CollectorStatus.AUTH_ERROR,
     )
     cache.save([bad])
-    assert "codex" in cache.load()
+    assert "codex/default" in cache.load()
 
 
 @pytest.mark.asyncio

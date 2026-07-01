@@ -1,0 +1,4 @@
+# Browser smoke tests (Playwright). Run alongside Python dev requirements.
+# pip install -r requirements-dev-frontend.txt && playwright install chromium
+playwright>=1.45.0,<2.0.0
+pytest-playwright>=0.5.0,<0.6.0

@@ -18,7 +18,7 @@ cards:
       max_cols: 1
     cards:
       - type: gauge
-        entity: sensor.modeldeck_codex_usage_percent
+        entity: sensor.modeldeck_codex_default_usage_percent
         name: Usage
         min: 0
         max: 100
@@ -32,13 +32,13 @@ cards:
         show_header_toggle: false
         state_color: false
         entities:
-          - entity: sensor.modeldeck_codex_usage_weekly_percent
+          - entity: sensor.modeldeck_codex_default_usage_weekly_percent
             name: Weekly Usage
-          - entity: sensor.modeldeck_codex_reset_at
+          - entity: sensor.modeldeck_codex_default_reset_at
             name: Reset At
-          - entity: sensor.modeldeck_codex_reset_weekly_at
+          - entity: sensor.modeldeck_codex_default_reset_weekly_at
             name: Weekly Reset At
-          - entity: sensor.modeldeck_codex_plan
+          - entity: sensor.modeldeck_codex_default_plan
             name: Plan
       - type: entities
         title: Codex Collector
@@ -51,9 +51,9 @@ cards:
                 --primary-text-color: #f44336;
               }
         entities:
-          - entity: sensor.modeldeck_codex_status
+          - entity: sensor.modeldeck_codex_default_status
             name: Status
-          - entity: sensor.modeldeck_codex_last_success
+          - entity: sensor.modeldeck_codex_default_last_success
             name: Last Success
   - type: custom:layout-card
     layout_type: custom:vertical-layout
@@ -62,7 +62,7 @@ cards:
       max_cols: 1
     cards:
       - type: gauge
-        entity: sensor.modeldeck_claude_usage_percent
+        entity: sensor.modeldeck_claude_default_usage_percent
         name: Usage 5h
         min: 0
         max: 100
@@ -76,13 +76,13 @@ cards:
         show_header_toggle: false
         state_color: false
         entities:
-          - entity: sensor.modeldeck_claude_usage_weekly_percent
+          - entity: sensor.modeldeck_claude_default_usage_weekly_percent
             name: Weekly Usage
-          - entity: sensor.modeldeck_claude_reset_at
+          - entity: sensor.modeldeck_claude_default_reset_at
             name: Reset At
-          - entity: sensor.modeldeck_claude_reset_weekly_at
+          - entity: sensor.modeldeck_claude_default_reset_weekly_at
             name: Weekly Reset At
-          - entity: sensor.modeldeck_claude_plan
+          - entity: sensor.modeldeck_claude_default_plan
             name: Plan
       - type: entities
         title: Claude Collector
@@ -95,9 +95,9 @@ cards:
                 --primary-text-color: #f44336;
               }
         entities:
-          - entity: sensor.modeldeck_claude_status
+          - entity: sensor.modeldeck_claude_default_status
             name: Status
-          - entity: sensor.modeldeck_claude_last_success
+          - entity: sensor.modeldeck_claude_default_last_success
             name: Last Success
   - type: custom:layout-card
     layout_type: custom:vertical-layout
@@ -106,7 +106,7 @@ cards:
       max_cols: 1
     cards:
       - type: gauge
-        entity: sensor.modeldeck_cursor_usage_percent
+        entity: sensor.modeldeck_cursor_default_usage_percent
         name: Usage
         min: 0
         max: 100
@@ -120,15 +120,15 @@ cards:
         show_header_toggle: false
         state_color: false
         entities:
-          - entity: sensor.modeldeck_cursor_usage_auto_percent
+          - entity: sensor.modeldeck_cursor_default_usage_auto_percent
             name: Auto + Composer
-          - entity: sensor.modeldeck_cursor_usage_api_percent
+          - entity: sensor.modeldeck_cursor_default_usage_api_percent
             name: API Usage
-          - entity: sensor.modeldeck_cursor_usage_used
+          - entity: sensor.modeldeck_cursor_default_usage_used
             name: Used
-          - entity: sensor.modeldeck_cursor_usage_limit
+          - entity: sensor.modeldeck_cursor_default_usage_limit
             name: Limit
-          - entity: sensor.modeldeck_cursor_reset_at
+          - entity: sensor.modeldeck_cursor_default_reset_at
             name: Reset At
       - type: entities
         title: Cursor Collector
@@ -141,9 +141,9 @@ cards:
                 --primary-text-color: #f44336;
               }
         entities:
-          - entity: sensor.modeldeck_cursor_status
+          - entity: sensor.modeldeck_cursor_default_status
             name: Status
-          - entity: sensor.modeldeck_cursor_last_success
+          - entity: sensor.modeldeck_cursor_default_last_success
             name: Last Success
   - type: custom:layout-card
     layout_type: custom:vertical-layout
@@ -157,29 +157,29 @@ cards:
         period: hour
         days_to_show: 1
         entities:
-          - entity: sensor.modeldeck_codex_usage_percent
+          - entity: sensor.modeldeck_codex_default_usage_percent
             name: Codex
-          - entity: sensor.modeldeck_claude_usage_percent
+          - entity: sensor.modeldeck_claude_default_usage_percent
             name: Claude
-          - entity: sensor.modeldeck_cursor_usage_percent
+          - entity: sensor.modeldeck_cursor_default_usage_percent
             name: Cursor
       - type: history-graph
         title: Codex (7 days)
         hours_to_show: 168
         entities:
-          - entity: sensor.modeldeck_codex_usage_percent
-          - entity: sensor.modeldeck_codex_usage_weekly_percent
+          - entity: sensor.modeldeck_codex_default_usage_percent
+          - entity: sensor.modeldeck_codex_default_usage_weekly_percent
       - type: history-graph
         title: Claude (7 days)
         hours_to_show: 168
         entities:
-          - entity: sensor.modeldeck_claude_usage_percent
-          - entity: sensor.modeldeck_claude_usage_weekly_percent
+          - entity: sensor.modeldeck_claude_default_usage_percent
+          - entity: sensor.modeldeck_claude_default_usage_weekly_percent
       - type: history-graph
         title: Cursor (7 days)
         hours_to_show: 168
         entities:
-          - entity: sensor.modeldeck_cursor_usage_percent
-          - entity: sensor.modeldeck_cursor_usage_auto_percent
-          - entity: sensor.modeldeck_cursor_usage_api_percent
+          - entity: sensor.modeldeck_cursor_default_usage_percent
+          - entity: sensor.modeldeck_cursor_default_usage_auto_percent
+          - entity: sensor.modeldeck_cursor_default_usage_api_percent
 subview: false

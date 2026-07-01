@@ -11,10 +11,17 @@ from modeldeck.core.paths import state_path
 from modeldeck.schemas.snapshot import CollectorStatus, ProviderSnapshot
 
 
+def _state_key(snapshot: ProviderSnapshot) -> str:
+    """Return the composite cache key for a snapshot: 'provider_id/account_id'."""
+    return f"{snapshot.provider_id}/{snapshot.account_id}"
+
+
 def snapshot_to_dict(snapshot: ProviderSnapshot) -> dict[str, Any]:
     """Serialize a snapshot for JSON storage."""
     return {
         "provider_id": snapshot.provider_id,
+        "account_id": snapshot.account_id,
+        "account_label": snapshot.account_label,
         "display_name": snapshot.display_name,
         "collected_at": snapshot.collected_at.isoformat(),
         "status": snapshot.status.value,
@@ -39,6 +46,8 @@ def snapshot_from_dict(data: dict[str, Any]) -> ProviderSnapshot:
     reset_weekly_raw = data.get("reset_at_weekly")
     return ProviderSnapshot(
         provider_id=data["provider_id"],
+        account_id=data.get("account_id", "default"),
+        account_label=data.get("account_label", ""),
         display_name=data["display_name"],
         collected_at=datetime.fromisoformat(data["collected_at"]),
         status=CollectorStatus(data["status"]),
@@ -62,7 +71,7 @@ class StateCache:
         self._path = path or state_path()
 
     def load(self) -> dict[str, ProviderSnapshot]:
-        """Load cached snapshots keyed by provider id."""
+        """Load cached snapshots keyed by 'provider_id/account_id'."""
         if not self._path.exists():
             return {}
         raw = json.loads(self._path.read_text(encoding="utf-8"))
@@ -72,10 +81,11 @@ class StateCache:
         """Persist snapshots, keeping last-good values on failure."""
         existing = self.load()
         for snapshot in snapshots:
+            key = _state_key(snapshot)
             if snapshot.status.value == "ok":
-                existing[snapshot.provider_id] = snapshot
-            elif snapshot.provider_id not in existing:
-                existing[snapshot.provider_id] = snapshot
+                existing[key] = snapshot
+            elif key not in existing:
+                existing[key] = snapshot
         self._path.parent.mkdir(parents=True, exist_ok=True)
         payload = {key: snapshot_to_dict(value) for key, value in existing.items()}
         self._path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

@@ -34,6 +34,11 @@ _PROVIDER_AUTH_DEFAULTS: dict[str, str] = {
     "cursor": "personal",
 }
 
+# All known secret fields across providers (used for flat-vs-nested detection).
+_ALL_SECRET_FIELDS: frozenset[str] = frozenset(
+    field for fields in _PROVIDER_SECRET_FIELDS.values() for field in fields
+)
+
 
 def _opt(options: dict[str, Any], key: str, default: Any = "") -> Any:
     value = options.get(key, default)
@@ -125,14 +130,16 @@ def normalize_options(options: dict[str, Any]) -> dict[str, Any]:
     return flat
 
 
-def _provider_toggle(options: dict[str, Any], provider_id: str) -> dict[str, Any]:
+def _provider_account(options: dict[str, Any], provider_id: str) -> dict[str, Any]:
+    """Build the default ProviderAccount dict for a provider from flat options."""
     prefix = provider_id
     return {
+        "id": "default",
+        "label": _opt(options, f"{prefix}_account_label") or "",
         "enabled": bool(_opt(options, f"{prefix}_enabled", False)),
         "auth_mode": str(
             _opt(options, f"{prefix}_auth_mode", _PROVIDER_AUTH_DEFAULTS[provider_id])
         ),
-        "account_label": _opt(options, f"{prefix}_account_label") or None,
     }
 
 
@@ -145,10 +152,40 @@ def _provider_secrets(options: dict[str, Any], provider_id: str) -> dict[str, st
     return block
 
 
-def build_config_dict(options: dict[str, Any]) -> dict[str, Any]:
-    """Build the public modeldeck.yaml mapping from add-on options."""
+def _should_seed_default(opts: dict[str, Any], provider_id: str) -> bool:
+    """Return True if the add-on options justify seeding a 'default' account.
+
+    A default account is seeded only when the provider is explicitly enabled
+    OR has at least one credential field set.  On a fresh install with nothing
+    configured all three flags are False and no credentials exist, so fresh
+    installs start with an empty account list (user adds accounts via the web
+    UI with '+ Add account').
+    """
+    if bool(_opt(opts, f"{provider_id}_enabled", False)):
+        return True
+    return any(
+        str(_opt(opts, f"{provider_id}_{field}", "")).strip()
+        for field in _PROVIDER_SECRET_FIELDS.get(provider_id, ())
+    )
+
+
+def build_config_dict(
+    options: dict[str, Any],
+    existing_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the public modeldeck.yaml mapping from add-on options.
+
+    If *existing_config* is provided (the current on-disk modeldeck.yaml), any
+    provider accounts beyond the add-on ``default`` account are preserved so
+    that accounts created via the web UI survive an add-on restart.
+
+    Fresh install behaviour: the add-on Configuration tab no longer has
+    provider credential fields, so on a clean install all providers are
+    disabled and credential-less.  In that case no ``default`` account is
+    seeded — the user adds accounts via the web UI.
+    """
     opts = normalize_options(options)
-    return {
+    config: dict[str, Any] = {
         "mqtt": {
             "host": normalize_mqtt_host(str(_opt(opts, "mqtt_host", "core-mosquitto"))),
             "port": int(_opt(opts, "mqtt_port", 1883)),
@@ -166,26 +203,69 @@ def build_config_dict(options: dict[str, Any]) -> dict[str, Any]:
         },
         "providers": {
             "mock": {"enabled": False},
-            "codex": _provider_toggle(opts, "codex"),
-            "claude": _provider_toggle(opts, "claude"),
-            "cursor": _provider_toggle(opts, "cursor"),
+            "codex": (
+                [_provider_account(opts, "codex")]
+                if _should_seed_default(opts, "codex") else []
+            ),
+            "claude": (
+                [_provider_account(opts, "claude")]
+                if _should_seed_default(opts, "claude") else []
+            ),
+            "cursor": (
+                [_provider_account(opts, "cursor")]
+                if _should_seed_default(opts, "cursor") else []
+            ),
         },
     }
+
+    # Merge web-UI accounts: preserve all existing accounts from the on-disk
+    # config so that accounts created (or updated) via the web UI survive an
+    # add-on restart / options re-render.
+    if existing_config and isinstance(existing_config.get("providers"), dict):
+        for provider_id in ("codex", "claude", "cursor"):
+            existing_accounts = existing_config["providers"].get(provider_id, [])
+            if not isinstance(existing_accounts, list):
+                continue
+            new_accounts: list[dict[str, Any]] = config["providers"][provider_id]
+            addon_default_ids = {a["id"] for a in new_accounts if isinstance(a, dict)}
+            # Keep existing accounts that are not being replaced by the add-on default.
+            extra = [
+                a for a in existing_accounts
+                if isinstance(a, dict) and a.get("id") not in addon_default_ids
+            ]
+            if extra:
+                config["providers"][provider_id] = [*new_accounts, *extra]
+
+    return config
 
 
 def build_secrets_dict(options: dict[str, Any]) -> dict[str, Any]:
     """Build secrets.yaml content from add-on options."""
     opts = normalize_options(options)
     mqtt_password = str(_opt(opts, "mqtt_password", "")).strip()
-    providers: dict[str, dict[str, str]] = {}
+    providers: dict[str, dict[str, Any]] = {}
     for provider_id in ("codex", "claude", "cursor"):
         block = _provider_secrets(opts, provider_id)
         if block:
-            providers[provider_id] = block
+            providers[provider_id] = {"default": block}
     secrets: dict[str, Any] = {"mqtt": {}, "providers": providers}
     if mqtt_password:
         secrets["mqtt"]["password"] = mqtt_password
     return secrets
+
+
+def _normalize_providers_raw(providers: dict[str, Any]) -> dict[str, Any]:
+    """Ensure provider secrets are in nested {account_id: {fields}} format."""
+    result: dict[str, Any] = {}
+    for pid, block in providers.items():
+        if not isinstance(block, dict):
+            continue  # Skip invalid/corrupted entries
+        # Flat format: has secret field keys at the top level
+        if any(k in _ALL_SECRET_FIELDS for k in block):
+            result[pid] = {"default": block}
+        else:
+            result[pid] = block
+    return result
 
 
 def _merge_secrets(
@@ -198,34 +278,48 @@ def _merge_secrets(
     if reset or not existing:
         return incoming
 
-    merged: dict[str, Any] = {
-        "mqtt": dict(existing.get("mqtt") or {}),
-        "providers": {
-            pid: dict(block)
-            for pid, block in (existing.get("providers") or {}).items()
-            if isinstance(block, dict)
-        },
-    }
+    # Normalise both to nested {account_id: {fields}} format.
+    existing_providers = _normalize_providers_raw(existing.get("providers") or {})
+    incoming_providers = _normalize_providers_raw(incoming.get("providers") or {})
 
+    # Start with existing MQTT, then overlay incoming password.
+    merged_mqtt = dict(existing.get("mqtt") or {})
     incoming_mqtt = incoming.get("mqtt") or {}
     if isinstance(incoming_mqtt, dict) and incoming_mqtt.get("password"):
-        merged.setdefault("mqtt", {})["password"] = incoming_mqtt["password"]
+        merged_mqtt["password"] = incoming_mqtt["password"]
 
-    for provider_id, incoming_block in (incoming.get("providers") or {}).items():
-        if not isinstance(incoming_block, dict):
+    # Merge provider account secrets.
+    merged_providers: dict[str, Any] = {}
+
+    for pid, accounts in existing_providers.items():
+        merged_providers[pid] = dict(accounts) if isinstance(accounts, dict) else {}
+
+    for pid, incoming_accounts in incoming_providers.items():
+        if not isinstance(incoming_accounts, dict):
             continue
-        current = merged.setdefault("providers", {}).setdefault(provider_id, {})
-        if not isinstance(current, dict):
-            current = {}
-            merged["providers"][provider_id] = current
-        for field, value in incoming_block.items():
-            if not value:
-                continue
-            if field in _OAUTH_FIELDS and str(current.get(field, "")).strip():
-                continue
-            current[field] = value
+        if pid not in merged_providers:
+            merged_providers[pid] = {}
 
-    return merged
+        for account_id, incoming_fields in incoming_accounts.items():
+            if not isinstance(incoming_fields, dict):
+                continue
+            current = merged_providers[pid].get(account_id, {})
+            if not isinstance(current, dict):
+                current = {}
+
+            for field, value in incoming_fields.items():
+                if not value:
+                    continue
+                if field in _OAUTH_FIELDS and str(current.get(field, "")).strip():
+                    continue
+                current[field] = value
+
+            merged_providers[pid][account_id] = current
+
+    return {
+        "mqtt": merged_mqtt,
+        "providers": merged_providers,
+    }
 
 
 def render_addon_config(
@@ -240,7 +334,15 @@ def render_addon_config(
     sec_path = secrets_path or config_dir / "secrets.yaml"
 
     opts = normalize_options(options)
-    config_dict = build_config_dict(opts)
+
+    # Load existing modeldeck.yaml so web-UI accounts survive re-render.
+    existing_config: dict[str, Any] = {}
+    if cfg_path.exists():
+        loaded_cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        if isinstance(loaded_cfg, dict):
+            existing_config = loaded_cfg
+
+    config_dict = build_config_dict(opts, existing_config=existing_config)
     secrets_dict = build_secrets_dict(opts)
 
     AppConfig.model_validate(config_dict)

@@ -95,7 +95,7 @@ def test_discovery_payload_json_roundtrip():
         status=CollectorStatus.OK,
     )
     raw = discovery_payload_json(MqttConfig(), snap, MetricKind.PLAN)
-    assert "modeldeck_mock_plan" in raw
+    assert "modeldeck_mock_default_plan" in raw
 
 
 @pytest.mark.asyncio

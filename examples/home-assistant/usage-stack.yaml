@@ -5,7 +5,7 @@
 type: vertical-stack
 cards:
   - type: gauge
-    entity: sensor.modeldeck_codex_usage_percent
+    entity: sensor.modeldeck_codex_default_usage_percent
     name: Codex Usage
     min: 0
     max: 100
@@ -17,11 +17,11 @@ cards:
   - type: entities
     title: OpenAI Codex
     entities:
-      - entity: sensor.modeldeck_codex_usage_weekly_percent
+      - entity: sensor.modeldeck_codex_default_usage_weekly_percent
         name: Weekly Usage
-      - entity: sensor.modeldeck_codex_reset_at
+      - entity: sensor.modeldeck_codex_default_reset_at
         name: Reset At
-      - entity: sensor.modeldeck_codex_plan
+      - entity: sensor.modeldeck_codex_default_plan
         name: Plan
-      - entity: sensor.modeldeck_codex_status
+      - entity: sensor.modeldeck_codex_default_status
         name: Collector Status

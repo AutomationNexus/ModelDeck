@@ -28,8 +28,8 @@ def test_state_cache_roundtrip(tmp_path):
     cache = StateCache(tmp_path / "state.json")
     cache.save([snap])
     loaded = cache.load()
-    assert "mock" in loaded
-    assert loaded["mock"].usage_percent == 10.0
+    assert "mock/default" in loaded
+    assert loaded["mock/default"].usage_percent == 10.0
 
 
 @pytest.mark.asyncio

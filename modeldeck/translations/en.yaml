@@ -1,0 +1,34 @@
+configuration:
+  mqtt:
+    name: MQTT
+    description: Broker connection (same style as Zigbee2MQTT)
+    fields:
+      server:
+        name: Server
+        description: e.g. mqtt://core-mosquitto:1883
+      username:
+        name: Username
+        description: Leave empty when Mosquitto allows local add-ons without auth
+      password:
+        name: Password
+        description: Must match the Mosquitto broker user, not your Home Assistant login
+      topic_prefix:
+        name: Topic prefix
+      discovery_prefix:
+        name: Home Assistant discovery prefix
+  service:
+    name: Service
+    description: Polling, logging, and token persistence
+    fields:
+      poll_interval_seconds:
+        name: Poll interval (seconds)
+      retain_state:
+        name: Retain last sensor state on MQTT
+      log_level:
+        name: Log level
+      persist_refreshed_tokens:
+        name: Save refreshed OAuth tokens to secrets file
+        description: During polling, write new Codex/Claude OAuth tokens to secrets.yaml after automatic refresh (default on). Not related to Configuration Save.
+      reset_secrets:
+        name: Overwrite secrets file from UI
+        description: On each Configuration Save, replace secrets.yaml with form values only (default off). Leave off for normal saves — merge keeps auto-refreshed tokens when password fields are empty.

@@ -1,6 +1,6 @@
 # Branch Policy
 
-GitHub branch protection is unavailable on the current plan. CI guards and local git hooks enforce the same rules.
+GitHub rulesets (`protect-dev`, `protect-main`) enforce these rules, backed up by CI guards and local git hooks.
 
 ## Protected branches
 
@@ -21,6 +21,9 @@ REM ... edit, commit ...
 ruff check src tests
 python -m pytest -q
 pre-commit run --all-files
+REM If you touched modeldeck/ or modeldeck-nightly/ (HA add-on folders):
+python tools/validate_ha_addon.py
+python tools/check_build_from.py
 git diff --check
 git push -u origin HEAD
 gh pr create --base dev --title "Short title" --body "Summary and test plan"
