@@ -34,7 +34,7 @@ class _Semver(NamedTuple):
     patch: int
 
     @classmethod
-    def parse(cls, version: str) -> "_Semver | None":
+    def parse(cls, version: str) -> _Semver | None:
         m = SEMVER_RE.match(version.strip())
         if not m:
             return None
@@ -197,6 +197,7 @@ def check_build_from(root: Path | None = None) -> list[str]:
 
 
 def main() -> int:
+    """CLI entry: exit non-zero when any add-on's BUILD_FROM pin is invalid."""
     errors = check_build_from()
     if errors:
         for err in errors:

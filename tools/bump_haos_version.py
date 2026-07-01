@@ -7,7 +7,7 @@ import argparse
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -43,7 +43,7 @@ def _save_version(config_path: Path, addon: dict, version: str) -> None:
 
 
 def _prepend_changelog(path: Path, version: str, body: str) -> None:
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     entry = f"## [{version}] - {today}\n\n{body.strip()}\n\n"
     existing = path.read_text(encoding="utf-8") if path.is_file() else "# Changelog\n\n"
     if not existing.startswith("#"):
@@ -121,7 +121,7 @@ def nightly_roll(
     config_path = _config_path(root, NIGHTLY_DIR)
     addon = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     current = str(addon.get("version", ""))
-    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    today = datetime.now(UTC).strftime("%Y%m%d")
 
     build_num = 0
     match = NIGHTLY_VERSION_RE.match(current)
@@ -142,6 +142,7 @@ def nightly_roll(
 
 
 def main() -> int:
+    """CLI entry: dispatch to the requested version-bump subcommand."""
     parser = argparse.ArgumentParser(description="Bump HAOS add-on versions")
     parser.add_argument("--root", type=Path, default=REPO_ROOT)
     sub = parser.add_subparsers(dest="command", required=True)
