@@ -30,3 +30,37 @@ jobs:
       platforms: linux/amd64,linux/arm64
       force_run: ${{ inputs.force_run || false }}
       coverage-threshold: 97
+
+  notify-haos:
+    name: Notify ModelDeck-HAOS
+    needs: nightly
+    if: needs.nightly.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.nightly.outputs.target_sha }}
+      - name: Resolve parent version
+        id: version
+        run: |
+          V=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "v=$V" >> "$GITHUB_OUTPUT"
+      - name: Mint CI-Bot token (ModelDeck-HAOS only)
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.CI_BOT_APP_ID }}
+          private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ModelDeck-HAOS
+      - name: Dispatch modeldeck-nightly-published
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+        run: |
+          gh api repos/${{ github.repository_owner }}/ModelDeck-HAOS/dispatches \
+            -f event_type=modeldeck-nightly-published \
+            -f "client_payload[version]=${{ steps.version.outputs.v }}" \
+            -f "client_payload[sha]=${{ needs.nightly.outputs.target_sha }}"
+          echo "Notified ModelDeck-HAOS: version=${{ steps.version.outputs.v }} sha=${{ needs.nightly.outputs.target_sha }}"
