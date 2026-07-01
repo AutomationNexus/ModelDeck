@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Row-4 live verification: add-on-only stable change (comment-only, no behavior change).
+# Verifies: add-on-only stable change auto-promotes to main with NO version bump
+# (simplified bare X.Y.Z versioning, comment-only, no behavior change).
 set -euo pipefail
 
 CONFIG_DIR="${MODELDECK_CONFIG_DIR:-/config}"
