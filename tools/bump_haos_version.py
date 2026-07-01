@@ -96,8 +96,13 @@ def stable_packaging_rev_after_promote(root: Path, old_main_sha: str) -> str | N
         cwd=root,
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
+    if old_docker.returncode != 0:
+        # modeldeck/ didn't exist at old_main_sha at all (e.g. the very first promote
+        # after adding the add-on folders to this repo) — nothing to diff against, and
+        # the version already synced onto dev is correct as-is. Skip the bump.
+        return None
     new_docker = _read_build_from(root, STABLE_DIR)
     old_parent = PARENT_SEMVER_RE.search(old_docker.stdout)
     new_parent = PARENT_SEMVER_RE.search(new_docker)
