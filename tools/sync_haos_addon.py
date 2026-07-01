@@ -98,8 +98,8 @@ def apply_stable_pin(haos_root: Path, version: str) -> bool:
 
 def main() -> int:
     """CLI entry: sync or check stable HAOS pin against a ModelDeck release tag."""
-    parser = argparse.ArgumentParser(description="Sync ModelDeck-HAOS stable add-on pin")
-    parser.add_argument("haos_root", type=Path, help="Path to ModelDeck-HAOS checkout")
+    parser = argparse.ArgumentParser(description="Sync ModelDeck stable add-on pin")
+    parser.add_argument("haos_root", type=Path, help="Path to repo root containing modeldeck/ (use '.' in-repo)")
     parser.add_argument("tag", help="ModelDeck release tag (e.g. v0.0.2)")
     parser.add_argument(
         "--check-only",

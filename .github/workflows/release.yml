@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
     tags: ["v*.*.*"]
+    # Add-on pointer bumps (nightly-roll / stable-sync) and doc-only commits to main must not
+    # rebuild Docker. Tag pushes are unaffected by paths-ignore (GitHub does not evaluate path
+    # filters for tag refs).
+    paths-ignore: ["**.md", "docs/**", "modeldeck/**", "modeldeck-nightly/**"]
   workflow_dispatch:
     inputs:
       tag_name:
@@ -34,45 +38,37 @@ jobs:
       has-validation: false   # validation done by CI on dev/main pushes
       python-version: "3.11"
 
-  sync-haos-stable:
-    name: Sync HAOS stable add-on pin
+  sync-addon-stable:
+    name: Sync stable add-on pin (in-repo)
     needs: [docker-release]
     if: always() && needs.docker-release.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Mint CI-Bot token for HAOS sync
+      - name: Mint CI-Bot token
         id: bot-token
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.CI_BOT_APP_ID }}
           private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: |
-            ModelDeck
-            ModelDeck-HAOS
       - uses: actions/checkout@v6
+        with:
+          ref: dev
+          token: ${{ steps.bot-token.outputs.token }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - name: Clone ModelDeck-HAOS dev
-        env:
-          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
-        run: |
-          git clone --branch dev --depth 1 \
-            "https://x-access-token:${GH_TOKEN}@github.com/automationnexus/ModelDeck-HAOS.git" \
-            haos-checkout
       - name: Check if sync is needed
         id: sync_check
         run: |
           set -euo pipefail
           TAG="${{ needs.docker-release.outputs.tag_name }}"
           if [ -z "$TAG" ] || [ "$TAG" = "v0.0.0" ]; then
-            echo "::error::HAOS sync aborted: resolved tag is empty or sentinel '${TAG}'. Check docker-release job outputs."
+            echo "::error::Addon sync aborted: resolved tag is empty or sentinel '${TAG}'. Check docker-release job outputs."
             exit 1
           fi
           pip install pyyaml -q
-          if python tools/sync_haos_addon.py haos-checkout "$TAG" --check-only; then
+          if python tools/sync_haos_addon.py . "$TAG" --check-only; then
             echo "needed=false" >> "$GITHUB_OUTPUT"
           else
             echo "needed=true" >> "$GITHUB_OUTPUT"
@@ -82,39 +78,35 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ needs.docker-release.outputs.tag_name }}"
-          if [ -z "$TAG" ] || [ "$TAG" = "v0.0.0" ]; then
-            echo "::error::HAOS sync aborted: resolved tag is empty or sentinel '${TAG}'. Check docker-release job outputs."
-            exit 1
-          fi
           pip install pyyaml -q
-          ADDON_NEW_PARENT="${TAG#v}" python tools/sync_haos_addon.py haos-checkout "$TAG"
-          cd haos-checkout && python tools/validate_ha_addon.py
-      - name: Open PR on ModelDeck-HAOS dev
+          ADDON_NEW_PARENT="${TAG#v}" python tools/sync_haos_addon.py . "$TAG"
+          python tools/validate_ha_addon.py
+      - name: Open PR to dev
         id: cpr
         if: steps.sync_check.outputs.needed == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ steps.bot-token.outputs.token }}
-          path: haos-checkout
-          commit-message: "chore(haos): sync add-on to ModelDeck ${{ needs.docker-release.outputs.tag_name }}"
-          title: "chore(haos): sync add-on to ModelDeck ${{ needs.docker-release.outputs.tag_name }}"
+          commit-message: "chore(addon): sync stable pin to ${{ needs.docker-release.outputs.tag_name }}"
+          title: "chore(addon): sync stable pin to ${{ needs.docker-release.outputs.tag_name }}"
           body: |
-            Automated sync after ModelDeck release.
-          branch: sync/modeldeck-${{ needs.docker-release.outputs.tag_name }}
+            Automated stable add-on pin sync after this ModelDeck release. Merging this PR
+            (it touches modeldeck/**) auto-fires the dev->main promote.
+          branch: sync/addon-stable-${{ needs.docker-release.outputs.tag_name }}
           base: dev
           delete-branch: true
-      - name: Auto-merge HAOS sync PR
+      - name: Auto-merge sync PR
         if: steps.sync_check.outputs.needed == 'true' && steps.cpr.outputs.pull-request-number != ''
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           PR="${{ steps.cpr.outputs.pull-request-number }}"
-          R="automationnexus/ModelDeck-HAOS"
-          head_sha=$(gh pr view "${PR}" --repo "${R}" --json headRefOid --jq '.headRefOid')
-          echo "Waiting for CI on HAOS sync PR #${PR} (head ${head_sha})..."
+          head_sha=$(gh pr view "${PR}" --repo "${REPO}" --json headRefOid --jq '.headRefOid')
+          echo "Waiting for CI on addon-stable sync PR #${PR} (head ${head_sha})..."
           for attempt in $(seq 1 60); do
-            runs_json=$(gh api "repos/${R}/actions/runs" \
+            runs_json=$(gh api "repos/${REPO}/actions/runs" \
               --method GET \
               --field event=pull_request \
               --field head_sha="${head_sha}" \
@@ -125,15 +117,15 @@ jobs:
             failing=$(jq '[.[] | select(.status == "completed" and (.conclusion | IN("success", "skipped", "neutral") | not))] | length' <<<"${runs_json}")
             echo "attempt=${attempt} ci_count=${ci_count} pending=${pending} failing=${failing}"
             if [ "${ci_count}" -gt 0 ] && [ "${pending}" -eq 0 ] && [ "${failing}" -eq 0 ]; then
-              echo "HAOS sync PR #${PR} CI is green."; break
+              echo "Addon-stable sync PR #${PR} CI is green."; break
             fi
             if [ "${failing}" -gt 0 ]; then
-              echo "::error::HAOS sync PR #${PR} CI failed."; exit 1
+              echo "::error::Addon-stable sync PR #${PR} CI failed."; exit 1
             fi
             if [ "${attempt}" -eq 60 ]; then
-              echo "::error::Timed out waiting for HAOS sync PR #${PR} CI."; exit 1
+              echo "::error::Timed out waiting for addon-stable sync PR #${PR} CI."; exit 1
             fi
             sleep 30
           done
-          gh pr merge "${PR}" --repo "${R}" --merge --delete-branch
-          echo "Merged HAOS sync PR #${PR}."
+          gh pr merge "${PR}" --repo "${REPO}" --merge --delete-branch
+          echo "Merged addon-stable sync PR #${PR}. Row-4 trigger on promote-dev-to-main.yml will auto-promote."
