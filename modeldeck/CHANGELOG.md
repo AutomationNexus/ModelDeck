@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.7.3] - 2026-07-01
+
+HAOS packaging update.
+
 ## [0.0.7.2] - 2026-07-01
 
 HAOS packaging update.
