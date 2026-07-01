@@ -48,14 +48,29 @@ def read_haos_state(haos_root: Path) -> tuple[str, str]:
     return version, match.group(2).strip()
 
 
+def resolve_haos_version(version: str, current_version: str) -> str:
+    """Compute the HAOS stable version for a parent release.
+
+    Preserves the existing packaging revision (the trailing `.A` component)
+    when the parent semver (X.Y.Z) is unchanged from the current HAOS pin —
+    a HAOS-only packaging bump (via bump_haos_version.py stable-packaging-rev)
+    must not be clobbered by a same-version re-sync. Resets to `.0` only when
+    the parent version actually changes.
+    """
+    match = re.fullmatch(r"(\d+\.\d+\.\d+)\.(\d+)", current_version)
+    if match and match.group(1) == version:
+        return current_version
+    return f"{version}.0"
+
+
 def apply_stable_pin(haos_root: Path, version: str) -> bool:
     """Update HAOS stable pin files. Returns True if files changed."""
     config_path = haos_root / HAOS_CONFIG_REL
     docker_path = haos_root / HAOS_DOCKERFILE_REL
     expected_image = f"{IMAGE_PREFIX}{version}"
-    haos_version = f"{version}.0"
 
     current_version, current_build = read_haos_state(haos_root)
+    haos_version = resolve_haos_version(version, current_version)
     if current_version == haos_version and current_build == expected_image:
         return False
 
@@ -98,7 +113,7 @@ def main() -> int:
     if args.check_only:
         current_version, current_build = read_haos_state(haos_root)
         expected = f"{IMAGE_PREFIX}{version}"
-        expected_haos_version = f"{version}.0"
+        expected_haos_version = resolve_haos_version(version, current_version)
         if current_version == expected_haos_version and current_build == expected:
             print("already synced")
             return 0
