@@ -67,9 +67,9 @@ No large file contents, raw diffs, secrets, or full logs.
   stays on the floating `:nightly` tag. Neither Dockerfile builds anything — they are thin
   wrappers around ModelDeck's own published image.
 - **Never hand-edit `version:` or `CHANGELOG.md` in either add-on folder.** Those fields are
-  written exclusively by automated jobs (nightly-roll, stable-sync, stable packaging-rev bump)
-  — see Versioning Cascade below. A manual edit will be silently overwritten or will desync
-  the pointer from what HA actually offers as an update.
+  written exclusively by automated jobs (nightly-roll, stable-sync) — see Versioning Cascade
+  below. A manual edit will be silently overwritten or will desync the pointer from what HA
+  actually offers as an update.
 - `@mdh-addon-engineer` for add-on config/Dockerfile/run.sh/schema work. `@mdh-qa-gatekeeper`
   for the add-on-specific local QA gate. `/mdh-sync-schema` when `options`/`schema` drift.
 
@@ -79,7 +79,7 @@ Two independent version pointers, computed entirely by automation, never by git-
 
 | Channel | Format | Meaning |
 |---|---|---|
-| `modeldeck/config.yaml` | `X.Y.Z.A` | X.Y.Z = parent release version. A = add-on packaging revision, bumped only when `modeldeck/` changes without a parent version change. |
+| `modeldeck/config.yaml` | `X.Y.Z` (bare, no suffix) | Always exactly the parent release version. There is no packaging-revision suffix by design — an add-on-only packaging change (e.g. a `run.sh` fix with no parent release) is never released standalone; it ships bundled at the next real release. |
 | `modeldeck-nightly/config.yaml` | `X.Y.Z-nightly.YYYYMMDD[.N]` | X.Y.Z = parent dev version at build time. N = same-day re-roll counter. |
 
 Event-driven cascade (all automatic, no manual steps in the normal flow):
@@ -88,15 +88,18 @@ Event-driven cascade (all automatic, no manual steps in the normal flow):
    published **straight to `main`** (never written back to `dev`) — this is what makes it
    loop-free: nightly triggers only on `dev` pushes, and the pointer commit lands on `main`.
 2. **Release (`dev`→`main` promote)** → `:vX.Y.Z` image builds → a bot PR syncs the stable
-   pin + resets `.A` to `0` **onto `dev`** (not main directly — humans also edit `modeldeck/`
-   on dev, so the pin update must go through the same branch to avoid a two-writer conflict)
-   → merging that PR touches `modeldeck/**`, which auto-fires the promote workflow → `main`
-   gets the new pin.
+   pin (bare `X.Y.Z`, no version-bump logic to run) **onto `dev`** (not main directly —
+   humans also edit `modeldeck/` on dev, so the pin update must go through the same branch
+   to avoid a two-writer conflict) → merging that PR touches `modeldeck/**`, which
+   auto-fires the promote workflow → `main` gets the new pin.
 3. **Add-on-only nightly tweak** (e.g. `modeldeck-nightly/run.sh`) merging to `dev` → same as
    event 1, folder content rides along in the next nightly-roll publish.
-4. **Add-on-only stable tweak** (e.g. `modeldeck/run.sh`) merging to `dev` → auto-fires the
-   promote workflow (path-filtered push trigger on `modeldeck/**`) → `.A` is bumped **on dev
-   first** (not after landing on main) → then promoted, so both branches stay converged.
+4. **Add-on-only stable tweak** (e.g. `modeldeck/run.sh`, no parent release) merging to `dev`
+   → auto-fires the promote workflow (path-filtered push trigger on `modeldeck/**`) → content
+   lands on `main` immediately (new installs get it), but the version string does **not**
+   change — there is no bump job. Existing installed HA users only see it as an update at
+   the next real release, when `X.Y.Z` genuinely changes. This is intentional, not a gap:
+   test add-on-only changes via the nightly channel first.
 
 The `promote-dev-to-main.yml` shared-workflow call passes `exclude-paths` for
 `modeldeck-nightly/config.yaml` and `modeldeck-nightly/CHANGELOG.md` — `main` is the sole

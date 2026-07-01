@@ -9,7 +9,8 @@
 - For add-on config, `Dockerfile`, `run.sh`, or add-on schema work, invoke `@mdh-addon-engineer`
   before finalizing the plan.
 - Never plan to hand-edit `modeldeck/config.yaml` or `modeldeck-nightly/config.yaml`'s `version`
-  field or `CHANGELOG.md` — those are written only by automated jobs (nightly-roll, stable-sync,
-  stable packaging-rev bump).
+  field or `CHANGELOG.md` — those are written only by automated jobs (nightly-roll, stable-sync).
+  Stable is always bare `X.Y.Z` matching the parent release; there is no packaging-revision
+  suffix.
 - When the user approves the plan and says go, build, or execute, hand off to `/md-execute`
   (built-in `build`). Do not implement inline.
