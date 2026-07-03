@@ -3,14 +3,19 @@
 ## Multi-account (v0.2+)
 
 ModelDeck supports **multiple accounts per provider**. Each account gets its own MQTT device
-and sensors (e.g. `sensor.modeldeck_claude_work_usage_percent`).
+and sensors (e.g. `sensor.modeldeck_claude_1_usage_percent`).
+
+Account names are **always auto-numbered** — there is no way to set a custom label. The first
+account added for a provider is `"{Provider Display Name} 1"` (e.g. `"Claude 1"`), the second
+`"{Provider Display Name} 2"`, and so on. This keeps entity ids fully predictable and
+collision-free; there is no rename feature.
 
 ### HAOS: add accounts via the Ingress web UI
 
 Open **Settings → Add-ons → ModelDeck → Open Web UI** (port 8099).
 
 1. Click **Add Account**.
-2. Choose provider and enter a label.
+2. Choose a provider (the account name, e.g. "Claude 1", is generated automatically).
 3. **Claude / Codex:** click the authorize URL → log in → paste back the code. ModelDeck
    exchanges the code for tokens and saves them.
 4. **Cursor:** paste your JWT (`eyJ...`) or session cookie.
@@ -22,13 +27,14 @@ Codex CLI on your PC does not affect accounts added via the web UI.**
 ### CLI / Docker: add accounts with `modeldeck login`
 
 ```bash
-modeldeck login --provider claude --label "Work Claude"
-# Prints authorize URL; paste back code when prompted.
+modeldeck login --provider claude
+# Account name is auto-generated (e.g. "Claude 1"). Prints authorize URL;
+# paste back code when prompted.
 
-modeldeck login --provider codex --label "Main Codex"
+modeldeck login --provider codex
 
 modeldeck accounts list
-modeldeck accounts remove --provider claude --account work_claude
+modeldeck accounts remove --provider claude --account 1
 modeldeck accounts disable --provider cursor --account default
 ```
 

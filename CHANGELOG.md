@@ -2,6 +2,29 @@
 
 All notable changes are documented here.
 
+## [Unreleased] - Account names are always auto-numbered, Rename feature removed
+
+### Changed
+
+- Account labels are no longer user-customizable. Adding a new account (web UI wizard
+  or `modeldeck login` / `modeldeck accounts add` CLI) always auto-generates the label
+  as `"{Provider Display Name} {n}"` (e.g. `"Claude 1"`, `"Claude 2"`, `"OpenAI Codex 1"`,
+  `"Cursor 1"`), 1-indexed per provider. The `--label` CLI flag has been removed.
+- Account ids are now always plain auto-incrementing integers (`"1"`, `"2"`, ...) rather
+  than derived from label text. This supersedes the `slugify(provider_id=...)`
+  text-normalization mechanism from the previous entry below — it's no longer needed
+  since free-text labels never reach account creation, which structurally eliminates the
+  provider-name-doubling bug class rather than working around it after the fact.
+- **Removed the Rename feature entirely** (UI button/modal and the
+  `POST /accounts/{provider}/{account_id}/rename` endpoint) — there is no longer a
+  user-controlled label to rename.
+- MQTT device discovery payloads now set `suggested_area: "ModelDeck"`, so all ModelDeck
+  devices can be grouped/filtered together in Home Assistant's Devices list. Fixes device
+  names in that list being indistinguishable bare numbers (`"1"`, `"1"`, `"2"`) across
+  different providers.
+- Forward-only: already-configured accounts (including ones created under the previous
+  labeling scheme) keep their existing id/label/entity_id untouched.
+
 ## [Unreleased] - Fix doubled provider name in account entity ids
 
 ### Fixed

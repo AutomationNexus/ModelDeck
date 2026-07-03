@@ -169,6 +169,7 @@ def build_discovery_payload(
             "name": snapshot.account_label or snapshot.display_name,
             "manufacturer": "ModelDeck",
             "model": "AI Quota Monitor",
+            "suggested_area": "ModelDeck",
         },
     }
     if "unit" in meta:

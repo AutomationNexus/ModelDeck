@@ -33,8 +33,8 @@ function noop() {
   /* no-op */
 }
 
-describe("AddAccountWizard — default label", () => {
-  it("pre-fills the label as {provider}_1 when no accounts exist yet for that provider", () => {
+describe("AddAccountWizard — auto-generated, non-editable labels", () => {
+  it("renders no editable label input at all", () => {
     render(
       <AddAccountWizard
         providers={PROVIDERS}
@@ -44,14 +44,28 @@ describe("AddAccountWizard — default label", () => {
         onError={noop}
       />,
     );
-    const input = screen.getByPlaceholderText(/Personal Claude/i) as HTMLInputElement;
-    expect(input.value).toBe("claude_1");
+    // There must be no text input on the provider step — only the
+    // provider <select>. Labels are never user-customizable.
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
 
-  it("increments the suggested index based on existing accounts for that provider", () => {
+  it("shows a preview of the server-generated label ('Claude 1') when no accounts exist yet", () => {
+    render(
+      <AddAccountWizard
+        providers={PROVIDERS}
+        accounts={[]}
+        onDone={noop}
+        onCancel={noop}
+        onError={noop}
+      />,
+    );
+    expect(screen.getByText("Claude 1")).toBeInTheDocument();
+  });
+
+  it("increments the preview index based on existing accounts for that provider", () => {
     const accounts: Account[] = [
-      { provider: "claude", id: "claude_1", label: "claude_1", enabled: true, auth_mode: "oauth" },
-      { provider: "claude", id: "work", label: "Work", enabled: true, auth_mode: "oauth" },
+      { provider: "claude", id: "1", label: "Claude 1", enabled: true, auth_mode: "oauth" },
+      { provider: "claude", id: "2", label: "Claude 2", enabled: true, auth_mode: "oauth" },
     ];
     render(
       <AddAccountWizard
@@ -62,13 +76,12 @@ describe("AddAccountWizard — default label", () => {
         onError={noop}
       />,
     );
-    const input = screen.getByPlaceholderText(/Personal Claude/i) as HTMLInputElement;
-    expect(input.value).toBe("claude_3");
+    expect(screen.getByText("Claude 3")).toBeInTheDocument();
   });
 
-  it("recomputes the default label when switching provider, unless the user customized it", () => {
+  it("updates the preview when switching provider", () => {
     const accounts: Account[] = [
-      { provider: "codex", id: "codex_1", label: "codex_1", enabled: true, auth_mode: "subscription" },
+      { provider: "codex", id: "1", label: "OpenAI Codex 1", enabled: true, auth_mode: "subscription" },
     ];
     render(
       <AddAccountWizard
@@ -81,32 +94,13 @@ describe("AddAccountWizard — default label", () => {
     );
     const select = screen.getByRole("combobox") as HTMLSelectElement;
     fireEvent.change(select, { target: { value: "codex" } });
-    const input = screen.getByPlaceholderText(/Personal OpenAI Codex/i) as HTMLInputElement;
-    expect(input.value).toBe("codex_2");
+    expect(screen.getByText("OpenAI Codex 2")).toBeInTheDocument();
   });
 
-  it("keeps a user-customized label when switching provider", () => {
-    render(
-      <AddAccountWizard
-        providers={PROVIDERS}
-        accounts={[]}
-        onDone={noop}
-        onCancel={noop}
-        onError={noop}
-      />,
-    );
-    const input = screen.getByPlaceholderText(/Personal Claude/i) as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "my custom label" } });
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
-    fireEvent.change(select, { target: { value: "codex" } });
-    const newInput = screen.getByPlaceholderText(/Personal OpenAI Codex/i) as HTMLInputElement;
-    expect(newInput.value).toBe("my custom label");
-  });
-
-  it("sends the pre-filled default label (not blank) when reserving the account", async () => {
+  it("calls reserveAccount with only provider and auth_mode — never a label", async () => {
     const reserveSpy = vi
       .spyOn(accountsApi, "reserveAccount")
-      .mockResolvedValue({ provider: "claude", id: "claude_1", label: "claude_1", enabled: false, auth_mode: "oauth" });
+      .mockResolvedValue({ provider: "claude", id: "1", label: "Claude 1", enabled: false, auth_mode: "oauth" });
     render(
       <AddAccountWizard
         providers={PROVIDERS}
@@ -119,6 +113,6 @@ describe("AddAccountWizard — default label", () => {
     fireEvent.click(screen.getByText("Next")); // provider step -> mode step
     fireEvent.click(await screen.findByText("Next")); // mode step -> reserveAccount
     await waitFor(() => expect(reserveSpy).toHaveBeenCalled());
-    expect(reserveSpy).toHaveBeenCalledWith("claude", "claude_1", "oauth");
+    expect(reserveSpy).toHaveBeenCalledWith("claude", "oauth");
   });
 });
