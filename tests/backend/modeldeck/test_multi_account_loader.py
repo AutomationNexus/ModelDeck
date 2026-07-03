@@ -10,6 +10,7 @@ from modeldeck.config.loader import (
     ProviderAccount,
     SecretsConfig,
     load_config,
+    next_account_id,
     slugify,
 )
 
@@ -212,55 +213,39 @@ def test_slugify_no_collision_without_existing():
 
 
 # ---------------------------------------------------------------------------
-# slugify — provider_id normalization (regression: entity id doubling)
+# next_account_id — auto-incrementing integer account ids
+#
+# Account labels are always server-generated ("{Provider Display Name} {n}")
+# and are never derived from free user text, so the account id is always a
+# plain integer. This structurally prevents the provider name from ever
+# appearing in the account id, so it can never double up with the
+# modeldeck_{provider_id}_{account_id} entity id template (e.g. the old
+# sensor.modeldeck_claude_claude_1_... bug class is impossible by
+# construction — there is no text-slug-stripping logic to get wrong).
 # ---------------------------------------------------------------------------
 
 
-def test_slugify_strips_redundant_provider_prefix():
-    """Label that literally embeds the provider name should not double up.
-
-    e.g. label "claude 1" for provider "claude" must not produce account id
-    "claude_1" when combined with the modeldeck_{provider}_{account} entity
-    template downstream — the account id itself should already be stripped
-    of the leading provider segment.
-    """
-    assert slugify("claude 1", set(), provider_id="claude") == "1"
-    assert slugify("Claude 1", set(), provider_id="claude") == "1"
-    assert slugify("claude_1", set(), provider_id="claude") == "1"
+def test_next_account_id_starts_at_one():
+    """No existing accounts for a provider -> first id is "1"."""
+    assert next_account_id(set()) == "1"
+    assert next_account_id(None) == "1"
 
 
-def test_slugify_strips_bare_provider_name_match():
-    """Label that is exactly the provider name falls back to 'account'."""
-    assert slugify("claude", set(), provider_id="claude") == "account"
-    assert slugify("Claude", set(), provider_id="claude") == "account"
+def test_next_account_id_increments():
+    """Existing numeric ids increment to the next integer."""
+    assert next_account_id({"1"}) == "2"
+    assert next_account_id({"1", "2"}) == "3"
 
 
-def test_slugify_provider_prefix_unaffected_when_no_match():
-    """Labels not starting with the provider name are untouched."""
-    assert slugify("Work Account", set(), provider_id="claude") == "work_account"
-    assert slugify("Personal", {"personal"}, provider_id="claude") == "personal_2"
+def test_next_account_id_fills_gaps():
+    """A deleted middle account leaves a gap that gets filled first."""
+    assert next_account_id({"1", "3"}) == "2"
 
 
-def test_slugify_provider_prefix_partial_word_not_stripped():
-    """A label starting with the provider name as a substring (not a full
-    underscore-delimited segment) should not be stripped, e.g. "claudex"
-    for provider "claude" is unrelated to "claude_x"."""
-    assert slugify("claudex", set(), provider_id="claude") == "claudex"
-
-
-def test_slugify_provider_prefix_collision_after_strip():
-    """Two different labels that collapse to the same base after stripping
-    the provider prefix must still be disambiguated with a numeric suffix
-    (regression for the 'same name on multiple accounts' collision risk)."""
-    existing = {"backup"}
-    # "Claude Backup" -> "claude_backup" -> strips to "backup" -> collides
-    # with the already-existing "backup" id -> bumped to "backup_2".
-    assert slugify("Claude Backup", existing, provider_id="claude") == "backup_2"
-
-
-def test_slugify_provider_prefix_none_is_noop():
-    """Omitting provider_id preserves the original (pre-fix) behaviour."""
-    assert slugify("claude 1", set()) == "claude_1"
+def test_next_account_id_ignores_non_numeric_ids():
+    """Legacy non-numeric ids (e.g. 'default', old custom slugs) are ignored."""
+    assert next_account_id({"default"}) == "1"
+    assert next_account_id({"default", "work", "1"}) == "2"
 
 
 # ---------------------------------------------------------------------------

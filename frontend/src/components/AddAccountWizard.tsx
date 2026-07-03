@@ -27,19 +27,21 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 export function AddAccountWizard({ providers, accounts, onDone, onCancel, onError }: Props) {
-  // Suggested default label for a provider: "{provider}_{n}" where n is
-  // 1-indexed based on how many accounts already exist for that provider.
-  // Kept in sync with the server-side fallback in slugify()/POST /accounts
-  // so the entity id never ends up doubling the provider name
-  // (e.g. modeldeck_claude_claude_1_... ). Fully editable by the user.
-  function defaultLabelFor(p: string): string {
+  // Preview of the label the server will generate: "{Provider} {n}", where
+  // n is 1-indexed based on how many accounts already exist for that
+  // provider. This is not user-editable — labels are always
+  // server-generated (POST /accounts takes no label) so the account id is
+  // always a plain auto-incrementing integer and can never double up with
+  // the provider name in the entity id (e.g. modeldeck_claude_claude_1_...
+  // is structurally impossible). This is a best-effort client-side
+  // estimate for display only; the server response is authoritative.
+  function previewLabelFor(p: string): string {
     const count = accounts.filter((a) => a.provider === p).length;
-    return `${p}_${count + 1}`;
+    return `${PROVIDER_LABELS[p]} ${count + 1}`;
   }
 
   const [step, setStep] = useState<Step>("provider");
   const [provider, setProvider] = useState("claude");
-  const [label, setLabel] = useState(() => defaultLabelFor("claude"));
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const [accountId, setAccountId] = useState("");
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
@@ -53,10 +55,7 @@ export function AddAccountWizard({ providers, accounts, onDone, onCancel, onErro
   const authModes = providerMeta?.auth_modes ?? [];
 
   // Default to the provider's recommended mode when switching provider.
-  // Also refresh the suggested label (e.g. "claude_1" -> "codex_1") unless
-  // the user already customized it away from the previous default.
   function handleProviderChange(newProvider: string) {
-    setLabel((prev) => (prev === defaultLabelFor(provider) ? defaultLabelFor(newProvider) : prev));
     setProvider(newProvider);
     setFieldError("");
     const meta = getProviderMeta(providers, newProvider);
@@ -97,7 +96,7 @@ export function AddAccountWizard({ providers, accounts, onDone, onCancel, onErro
     setBusy(true);
     setFieldError("");
     try {
-      const acct = await reserveAccount(provider, label.trim() || defaultLabelFor(provider), authMode.id);
+      const acct = await reserveAccount(provider, authMode.id);
       setAccountId(acct.id);
       if (authMode.oauth_capable) {
         const res = await startOAuth(provider, acct.id);
@@ -189,19 +188,11 @@ export function AddAccountWizard({ providers, accounts, onDone, onCancel, onErro
                   ))}
                 </select>
               </div>
-              <div className="form-group">
-                <label className="form-label">Label</label>
-                <input
-                  type="text"
-                  value={label}
-                  placeholder={`e.g. Personal ${PROVIDER_LABELS[provider]}`}
-                  onChange={(e) => setLabel(e.target.value)}
-                />
-                <p className="text-muted" style={{ fontSize: "0.75rem", marginTop: 4 }}>
-                  Used to build the Home Assistant entity id — edit freely, only
-                  a-z, 0-9, and _ are kept.
-                </p>
-              </div>
+              <p className="text-muted" style={{ fontSize: "0.82rem" }}>
+                This account will be named <strong>{previewLabelFor(provider)}</strong>.
+                Account names are assigned automatically and aren't customizable,
+                so entity ids stay predictable and never collide.
+              </p>
               {/* Cursor no-OAuth note */}
               {noOAuthNote && (
                 <p style={{

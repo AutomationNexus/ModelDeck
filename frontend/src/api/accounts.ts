@@ -6,7 +6,6 @@ import type {
   OAuthStartResponse,
   ProvidersResponse,
   ProviderMeta,
-  RenameResponse,
   VerifyResponse,
 } from "./types";
 
@@ -21,10 +20,11 @@ export async function fetchProviders(): Promise<ProviderMeta[]> {
 
 export async function reserveAccount(
   provider: string,
-  label: string,
   auth_mode: string,
 ): Promise<Account> {
-  return api.post<Account>("accounts", { provider, label, auth_mode });
+  // Labels are always server-generated ("{Provider Display Name} {n}") and
+  // are not user-customizable — there is no label parameter here by design.
+  return api.post<Account>("accounts", { provider, auth_mode });
 }
 
 export async function startOAuth(
@@ -82,18 +82,6 @@ export async function deleteAccount(
   accountId: string,
 ): Promise<{ status: string }> {
   return api.delete(`accounts/${provider}/${accountId}`);
-}
-
-export async function renameAccount(
-  provider: string,
-  accountId: string,
-  label: string,
-  updateEntityId: boolean,
-): Promise<RenameResponse> {
-  return api.post(`accounts/${provider}/${accountId}/rename`, {
-    label,
-    update_entity_id: updateEntityId,
-  });
 }
 
 export async function fetchAccountEntities(
