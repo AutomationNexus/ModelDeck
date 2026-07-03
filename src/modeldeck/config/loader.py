@@ -149,9 +149,31 @@ class AppConfig(BaseModel):
         return value
 
 
-def slugify(label: str, existing: set[str] | None = None) -> str:
-    """Convert label to a lowercase slug; suffix with _2, _3 on collision."""
+def slugify(
+    label: str,
+    existing: set[str] | None = None,
+    provider_id: str | None = None,
+) -> str:
+    """Convert label to a lowercase slug; suffix with _2, _3 on collision.
+
+    When ``provider_id`` is given and the resulting slug equals or is
+    prefixed by the provider id (e.g. label "Claude 1" for provider
+    "claude" -> "claude_1"), that redundant leading segment is stripped
+    before collision checking. Entity/device ids are built elsewhere as
+    ``modeldeck_{provider_id}_{account_id}``, so leaving the provider name
+    embedded in the account id would otherwise double it up (e.g.
+    ``modeldeck_claude_claude_1_...``). Stripping happens *before* the
+    collision loop runs so two differently-labelled accounts that collapse
+    to the same base (e.g. "Backup" and "Claude Backup" under provider
+    "claude") still get disambiguated with a numeric suffix.
+    """
     base = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or "account"
+    if provider_id:
+        if base == provider_id:
+            base = ""
+        elif base.startswith(f"{provider_id}_"):
+            base = base[len(provider_id) + 1 :]
+        base = base or "account"
     slug = base
     n = 2
     while existing and slug in existing:

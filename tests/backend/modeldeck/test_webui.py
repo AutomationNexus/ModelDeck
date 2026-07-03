@@ -184,6 +184,77 @@ def test_create_account_returns_account_id_and_provider(monkeypatch):
     assert data["provider"] == "claude"
 
 
+def test_create_account_label_matching_provider_name_not_doubled(monkeypatch):
+    """A label that embeds the provider name must not double up in the id.
+
+    Regression for entity ids like sensor.modeldeck_claude_claude_1_... —
+    the account id itself must not repeat the provider segment, since the
+    MQTT discovery template already prepends modeldeck_{provider}_.
+    """
+    cfg = _make_minimal_config()
+    secrets = _empty_secrets()
+    monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, secrets))
+    monkeypatch.setattr(
+        "modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None
+    )
+
+    app = create_app()
+    with TestClient(app) as tc:
+        resp = tc.post(
+            "/accounts",
+            json={"provider": "claude", "label": "claude 1", "auth_mode": "oauth"},
+        )
+    data = resp.json()
+    assert data["id"] == "1"
+    assert not data["id"].startswith("claude")
+
+
+def test_create_account_blank_label_auto_numbers_per_provider(monkeypatch):
+    """Blank label should auto-default to provider_N (1-indexed) and the
+    stored id should be the normalized, non-doubled slug."""
+    cfg = _make_minimal_config()
+    secrets = _empty_secrets()
+    monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, secrets))
+    monkeypatch.setattr(
+        "modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None
+    )
+
+    app = create_app()
+    with TestClient(app) as tc:
+        resp = tc.post(
+            "/accounts",
+            json={"provider": "claude", "label": "", "auth_mode": "oauth"},
+        )
+    data = resp.json()
+    assert data["label"] == "claude_1"
+    assert data["id"] == "1"
+
+
+def test_create_account_blank_label_increments_with_existing_accounts(monkeypatch):
+    """A second blank-label account for the same provider should not
+    collide with the first, and both entity ids stay distinct."""
+    cfg = _make_minimal_config(
+        claude_accounts=[
+            {"id": "1", "label": "claude_1", "enabled": True, "auth_mode": "oauth"}
+        ]
+    )
+    secrets = _empty_secrets()
+    monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, secrets))
+    monkeypatch.setattr(
+        "modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None
+    )
+
+    app = create_app()
+    with TestClient(app) as tc:
+        resp = tc.post(
+            "/accounts",
+            json={"provider": "claude", "label": "", "auth_mode": "oauth"},
+        )
+    data = resp.json()
+    assert data["label"] == "claude_2"
+    assert data["id"] == "2"
+
+
 def test_create_account_unknown_provider_returns_400(monkeypatch):
     """POST /accounts with unknown provider should return 400."""
     cfg = _make_minimal_config()

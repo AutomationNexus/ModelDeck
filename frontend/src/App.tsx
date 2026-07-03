@@ -149,6 +149,7 @@ export function App() {
       {showWizard && (
         <AddAccountWizard
           providers={providers}
+          accounts={accounts ?? []}
           onDone={() => { setShowWizard(false); void load(); onSuccess("Account added and enabled."); }}
           onCancel={() => setShowWizard(false)}
           onError={onError}

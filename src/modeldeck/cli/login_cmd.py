@@ -133,7 +133,6 @@ def _ensure_account_in_config(
 def cmd_login(args: argparse.Namespace) -> int:
     """Run the OAuth login wizard for a provider."""
     provider = args.provider
-    label = args.label or f"{provider.capitalize()} account"
 
     # Compute account id slug from label.
     try:
@@ -143,7 +142,8 @@ def cmd_login(args: argparse.Namespace) -> int:
     except Exception:
         existing_ids = set()
 
-    account_id = slugify(label, existing_ids)
+    label = args.label or f"{provider}_{len(existing_ids) + 1}"
+    account_id = slugify(label, existing_ids, provider_id=provider)
 
     if provider in _PASTE_ONLY_PROVIDERS:
         print("\nCursor does not support an OAuth login wizard.")
@@ -184,7 +184,6 @@ def cmd_accounts_list(args: argparse.Namespace) -> int:
 def cmd_accounts_add(args: argparse.Namespace) -> int:
     """Add a new account (paste-token path for Cursor and api-key modes)."""
     provider = args.provider
-    label = args.label or f"{provider.capitalize()} account"
     token = getattr(args, "token", None) or ""
     auth_mode = getattr(args, "auth_mode", "auto") or "auto"
 
@@ -195,7 +194,8 @@ def cmd_accounts_add(args: argparse.Namespace) -> int:
     except Exception:
         existing_ids = set()
 
-    account_id = slugify(label, existing_ids)
+    label = args.label or f"{provider}_{len(existing_ids) + 1}"
+    account_id = slugify(label, existing_ids, provider_id=provider)
 
     if token:
         # Cursor personal or api-key paste
