@@ -2,6 +2,25 @@
 
 All notable changes are documented here.
 
+## [Unreleased] - Fix doubled provider name in account entity ids
+
+### Fixed
+
+- New accounts whose label repeated the provider name (e.g. `"claude 1"`, or the
+  blank-label auto-default) no longer produce doubled MQTT/HA entity ids such as
+  `sensor.modeldeck_claude_claude_1_usage_percent`. `slugify()` now strips a
+  redundant leading provider segment from the account slug before it is stored,
+  so the id becomes `sensor.modeldeck_claude_1_usage_percent` instead. Two
+  accounts on the same provider that would otherwise collapse to the same slug
+  after stripping are still disambiguated with a numeric suffix.
+- Leaving the label blank when adding an account now defaults to
+  `{provider}_{n}` (1-indexed, based on existing accounts for that provider)
+  instead of the human-readable provider name. The "Add account" wizard
+  pre-fills this suggestion in the label field, fully editable.
+- This is a forward-only fix: already-configured accounts keep their existing
+  id/entity_id; use the existing rename feature (with "update entity id") to
+  adopt the new naming on an existing account.
+
 ## [Unreleased] - Stable add-on versioning simplified
 
 ### Changed

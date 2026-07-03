@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from modeldeck.config.loader import MqttConfig
+from modeldeck.config.loader import MqttConfig, slugify
 from modeldeck.mqtt.client import MqttBridge, SnapshotPublish
 from modeldeck.mqtt.discovery import (
     build_discovery_payload,
@@ -59,6 +59,21 @@ def test_homeassistant_entity_id():
         homeassistant_entity_id("codex", "default", MetricKind.USAGE_PERCENT)
         == "sensor.modeldeck_codex_default_usage_percent"
     )
+
+
+def test_entity_id_not_doubled_for_provider_named_label():
+    """End-to-end regression: a label embedding the provider name must not
+    double up in the final HA entity_id (e.g. sensor.modeldeck_claude_claude_1_...).
+
+    Mirrors the real flow: slugify() normalizes the account id at account
+    creation time, then the (unchanged) discovery template combines
+    provider_id + account_id.
+    """
+    account_id = slugify("claude 1", set(), provider_id="claude")
+    assert account_id == "1"
+    entity_id = homeassistant_entity_id("claude", account_id, MetricKind.USAGE_PERCENT)
+    assert entity_id == "sensor.modeldeck_claude_1_usage_percent"
+    assert "claude_claude" not in entity_id
     assert (
         homeassistant_entity_id("cursor", "personal", MetricKind.USAGE_AUTO_PERCENT)
         == "sensor.modeldeck_cursor_personal_usage_auto_percent"

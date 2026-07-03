@@ -212,6 +212,58 @@ def test_slugify_no_collision_without_existing():
 
 
 # ---------------------------------------------------------------------------
+# slugify — provider_id normalization (regression: entity id doubling)
+# ---------------------------------------------------------------------------
+
+
+def test_slugify_strips_redundant_provider_prefix():
+    """Label that literally embeds the provider name should not double up.
+
+    e.g. label "claude 1" for provider "claude" must not produce account id
+    "claude_1" when combined with the modeldeck_{provider}_{account} entity
+    template downstream — the account id itself should already be stripped
+    of the leading provider segment.
+    """
+    assert slugify("claude 1", set(), provider_id="claude") == "1"
+    assert slugify("Claude 1", set(), provider_id="claude") == "1"
+    assert slugify("claude_1", set(), provider_id="claude") == "1"
+
+
+def test_slugify_strips_bare_provider_name_match():
+    """Label that is exactly the provider name falls back to 'account'."""
+    assert slugify("claude", set(), provider_id="claude") == "account"
+    assert slugify("Claude", set(), provider_id="claude") == "account"
+
+
+def test_slugify_provider_prefix_unaffected_when_no_match():
+    """Labels not starting with the provider name are untouched."""
+    assert slugify("Work Account", set(), provider_id="claude") == "work_account"
+    assert slugify("Personal", {"personal"}, provider_id="claude") == "personal_2"
+
+
+def test_slugify_provider_prefix_partial_word_not_stripped():
+    """A label starting with the provider name as a substring (not a full
+    underscore-delimited segment) should not be stripped, e.g. "claudex"
+    for provider "claude" is unrelated to "claude_x"."""
+    assert slugify("claudex", set(), provider_id="claude") == "claudex"
+
+
+def test_slugify_provider_prefix_collision_after_strip():
+    """Two different labels that collapse to the same base after stripping
+    the provider prefix must still be disambiguated with a numeric suffix
+    (regression for the 'same name on multiple accounts' collision risk)."""
+    existing = {"backup"}
+    # "Claude Backup" -> "claude_backup" -> strips to "backup" -> collides
+    # with the already-existing "backup" id -> bumped to "backup_2".
+    assert slugify("Claude Backup", existing, provider_id="claude") == "backup_2"
+
+
+def test_slugify_provider_prefix_none_is_noop():
+    """Omitting provider_id preserves the original (pre-fix) behaviour."""
+    assert slugify("claude 1", set()) == "claude_1"
+
+
+# ---------------------------------------------------------------------------
 # ProviderAccount model validation
 # ---------------------------------------------------------------------------
 

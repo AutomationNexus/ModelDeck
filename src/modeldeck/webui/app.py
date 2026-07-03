@@ -503,12 +503,13 @@ def create_app() -> FastAPI:
         except Exception:
             existing_ids = set()
 
-        account_id = slugify(body.label or body.provider, existing_ids)
+        label = body.label or f"{body.provider}_{len(existing_ids) + 1}"
+        account_id = slugify(label, existing_ids, provider_id=body.provider)
         # Return the reserved id; config is written only after credentials are confirmed.
         return {
             "provider": body.provider,
             "id": account_id,
-            "label": body.label,
+            "label": label,
             "enabled": False,
             "auth_mode": body.auth_mode,
         }
@@ -699,7 +700,7 @@ def create_app() -> FastAPI:
             a.get("id") for a in accounts
             if isinstance(a, dict) and a.get("id") != account_id
         }
-        new_id = slugify(new_label, existing_ids)
+        new_id = slugify(new_label, existing_ids, provider_id=provider)
 
         if new_id == account_id:
             # Slug unchanged (e.g. label was "My Acc" → "My Acc !" → same slug).
