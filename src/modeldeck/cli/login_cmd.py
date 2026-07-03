@@ -15,7 +15,12 @@ from modeldeck.auth.oauth_flow import (
     parse_code_and_state,
 )
 from modeldeck.auth.provider_specs import get_spec, supported_oauth_providers
-from modeldeck.config.loader import ProviderAccount, load_config, slugify
+from modeldeck.config.loader import (
+    PROVIDER_DISPLAY_NAMES,
+    ProviderAccount,
+    load_config,
+    next_account_id,
+)
 from modeldeck.config.secrets_writer import write_account_secrets
 from modeldeck.core.logging import get_logger
 
@@ -131,11 +136,14 @@ def _ensure_account_in_config(
 
 
 def cmd_login(args: argparse.Namespace) -> int:
-    """Run the OAuth login wizard for a provider."""
-    provider = args.provider
-    label = args.label or f"{provider.capitalize()} account"
+    """Run the OAuth login wizard for a provider.
 
-    # Compute account id slug from label.
+    Account labels are always auto-generated ("{Provider Display Name} {n}")
+    and are not user-customizable — there is no --label flag.
+    """
+    provider = args.provider
+
+    # Compute the next auto-numbered account id for this provider.
     try:
         config, _ = load_config()
         existing_accounts = getattr(config.providers, provider, [])
@@ -143,12 +151,13 @@ def cmd_login(args: argparse.Namespace) -> int:
     except Exception:
         existing_ids = set()
 
-    account_id = slugify(label, existing_ids)
+    account_id = next_account_id(existing_ids)
+    label = f"{PROVIDER_DISPLAY_NAMES[provider]} {account_id}"
 
     if provider in _PASTE_ONLY_PROVIDERS:
         print("\nCursor does not support an OAuth login wizard.")
         print("To add a Cursor account, paste your JWT token:")
-        print("  modeldeck accounts add --provider cursor --label 'My Cursor' --token 'eyJ...'")
+        print("  modeldeck accounts add --provider cursor --token 'eyJ...'")
         return 1
 
     return asyncio.run(_run_oauth_login(provider, label, account_id))
@@ -182,9 +191,12 @@ def cmd_accounts_list(args: argparse.Namespace) -> int:
 
 
 def cmd_accounts_add(args: argparse.Namespace) -> int:
-    """Add a new account (paste-token path for Cursor and api-key modes)."""
+    """Add a new account (paste-token path for Cursor and api-key modes).
+
+    Account labels are always auto-generated ("{Provider Display Name} {n}")
+    and are not user-customizable — there is no --label flag.
+    """
     provider = args.provider
-    label = args.label or f"{provider.capitalize()} account"
     token = getattr(args, "token", None) or ""
     auth_mode = getattr(args, "auth_mode", "auto") or "auto"
 
@@ -195,7 +207,8 @@ def cmd_accounts_add(args: argparse.Namespace) -> int:
     except Exception:
         existing_ids = set()
 
-    account_id = slugify(label, existing_ids)
+    account_id = next_account_id(existing_ids)
+    label = f"{PROVIDER_DISPLAY_NAMES[provider]} {account_id}"
 
     if token:
         # Cursor personal or api-key paste
@@ -300,7 +313,6 @@ def register_login_commands(sub: argparse._SubParsersAction) -> None:
         required=True,
         help="Provider to log in to",
     )
-    login.add_argument("--label", default="", help="Human-readable account label")
     login.set_defaults(func=cmd_login)
 
     # modeldeck accounts
@@ -312,7 +324,6 @@ def register_login_commands(sub: argparse._SubParsersAction) -> None:
 
     acc_add = acc_sub.add_parser("add", help="Add a new account (paste-token)")
     acc_add.add_argument("--provider", choices=["claude", "codex", "cursor"], required=True)
-    acc_add.add_argument("--label", default="")
     acc_add.add_argument("--token", default="", help="JWT/cookie/API key to paste")
     acc_add.add_argument("--auth-mode", dest="auth_mode", default="auto")
     acc_add.set_defaults(func=cmd_accounts_add)

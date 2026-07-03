@@ -160,6 +160,35 @@ def slugify(label: str, existing: set[str] | None = None) -> str:
     return slug
 
 
+# Human-readable provider display names, used to build the auto-generated
+# account label ("{Provider Display Name} {n}"). Single source of truth
+# shared by the web UI (POST /accounts) and the CLI (login/accounts add).
+PROVIDER_DISPLAY_NAMES: dict[str, str] = {
+    "codex": "OpenAI Codex",
+    "claude": "Claude",
+    "cursor": "Cursor",
+}
+
+
+def next_account_id(existing: set[str] | None = None) -> str:
+    """Return the next available auto-incrementing integer account id.
+
+    Ids are always plain positive integers ("1", "2", "3", ...), so the
+    account id never contains the provider name and can never double up
+    with the ``modeldeck_{provider_id}_{account_id}`` entity id template.
+    Non-numeric existing ids (e.g. the legacy "default" id, or custom
+    slugs created before account labels became auto-generated) are simply
+    ignored. Gaps are filled: if ids "1" and "3" already exist, the next
+    id is "2", not "4".
+    """
+    existing = existing or set()
+    used = {int(x) for x in existing if x.isdigit()}
+    n = 1
+    while n in used:
+        n += 1
+    return str(n)
+
+
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}

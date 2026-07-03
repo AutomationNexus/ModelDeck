@@ -101,7 +101,9 @@ def check_addon_build_from(addon_dir: Path) -> list[str]:
             )
         if not NIGHTLY_VERSION_RE.match(version):
             errors.append(
-                f"{folder} nightly version must match X.Y.Z-nightly.YYYYMMDD[.n], "
+                f"{folder} nightly version must match X.Y.Z-nightly.YYYYMMDD[.n] "
+                f"(bump_haos_version.py now always generates .N going forward; bare "
+                f"YYYYMMDD without a counter is only accepted here for legacy pointers), "
                 f"got {version!r}"
             )
     else:

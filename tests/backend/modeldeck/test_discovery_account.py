@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from modeldeck.config.loader import MqttConfig
+from modeldeck.config.loader import MqttConfig, next_account_id
 from modeldeck.mqtt.client import MqttBridge, SnapshotPublish
 from modeldeck.mqtt.discovery import (
     build_discovery_payload,
@@ -59,10 +59,22 @@ def test_homeassistant_entity_id():
         homeassistant_entity_id("codex", "default", MetricKind.USAGE_PERCENT)
         == "sensor.modeldeck_codex_default_usage_percent"
     )
-    assert (
-        homeassistant_entity_id("cursor", "personal", MetricKind.USAGE_AUTO_PERCENT)
-        == "sensor.modeldeck_cursor_personal_usage_auto_percent"
-    )
+
+
+def test_entity_id_never_doubles_provider_name():
+    """End-to-end regression: auto-generated account ids are always plain
+    integers, so they can never re-embed the provider name and double up
+    in the final HA entity_id (e.g. sensor.modeldeck_claude_claude_1_...).
+
+    Mirrors the real flow: next_account_id() computes the account id at
+    account creation time (never derived from free user text), then the
+    discovery template combines provider_id + account_id.
+    """
+    account_id = next_account_id(set())
+    assert account_id == "1"
+    entity_id = homeassistant_entity_id("claude", account_id, MetricKind.USAGE_PERCENT)
+    assert entity_id == "sensor.modeldeck_claude_1_usage_percent"
+    assert "claude_claude" not in entity_id
 
 
 def test_state_topic_includes_account():
@@ -90,6 +102,15 @@ def test_build_discovery_payload_device_identifiers():
     snap = _snapshot("claude", "work")
     payload = build_discovery_payload(mqtt, snap, MetricKind.STATUS)
     assert payload["device"]["identifiers"] == ["modeldeck_claude_work"]
+
+
+def test_build_discovery_payload_device_suggested_area():
+    """Device payload sets a suggested_area so ModelDeck devices can be
+    grouped/filtered together in the HA Devices list."""
+    mqtt = MqttConfig()
+    snap = _snapshot("claude", "work")
+    payload = build_discovery_payload(mqtt, snap, MetricKind.STATUS)
+    assert payload["device"]["suggested_area"] == "ModelDeck"
 
 
 def test_build_discovery_payload_unique_id_and_object_id():

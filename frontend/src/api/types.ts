@@ -48,13 +48,6 @@ export interface VerifyResponse {
   auth_mode: string;
 }
 
-export interface RenameResponse {
-  status: string;
-  account_id: string;
-  label: string;
-  entity_id_changed: boolean;
-}
-
 export interface AccountEntity {
   metric: string;
   name: string;

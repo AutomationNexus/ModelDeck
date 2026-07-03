@@ -76,10 +76,11 @@ def nightly_roll(
     if match and match.group(1) == parent_version and match.group(2) == today:
         build_num = int(match.group(3) or 0) + 1
 
-    if build_num:
-        new_version = f"{parent_version}-nightly.{today}.{build_num}"
-    else:
-        new_version = f"{parent_version}-nightly.{today}"
+    # Always emit an explicit build counter (first build of the day is `.0`) -- a
+    # consistently-shaped version string is safer for HA's update comparator than
+    # sometimes-bare/sometimes-suffixed. NIGHTLY_VERSION_RE above still accepts legacy
+    # bare (no-counter) pointers so old, already-published values roll forward correctly.
+    new_version = f"{parent_version}-nightly.{today}.{build_num}"
 
     _save_version(config_path, addon, new_version)
     body = note.strip() or "Nightly build roll."

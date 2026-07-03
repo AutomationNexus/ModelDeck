@@ -82,11 +82,26 @@ For full parity with Codex-style sensors (plan + 5h reset more often), use **coo
 ## Entity ID format (multi-account, v0.2+)
 
 **Current (v0.2+):** `sensor.modeldeck_{provider}_{account}_{metric}` — for example
-`sensor.modeldeck_codex_default_usage_percent`, `sensor.modeldeck_claude_work_status`.
+`sensor.modeldeck_codex_default_usage_percent`, `sensor.modeldeck_claude_1_status`,
+`sensor.modeldeck_claude_2_status`.
 
-The `{account}` segment is the account slug chosen when adding an account. The static add-on
-options use `default`. Extra accounts added via the web UI use the slug derived from the
-account label (e.g. "Work Claude" → `work_claude`).
+The `{account}` segment is the account id. The static add-on options use `default`.
+Extra accounts added via the web UI or CLI (`modeldeck login` / `modeldeck accounts add`)
+are **always auto-numbered** — account names are not user-customizable. The first
+account added for a provider gets id `1` and display label `"{Provider Display Name} 1"`
+(e.g. `"Claude 1"`, `"OpenAI Codex 1"`, `"Cursor 1"`); the second gets `2` and
+`"{Provider Display Name} 2"`; and so on, per provider. Ids are always plain integers,
+so the account id can never re-embed the provider name and can never double up with
+the `modeldeck_{provider}_` entity id prefix (e.g. the old
+`sensor.modeldeck_claude_claude_1_...` bug class is impossible by construction).
+
+There is no way to rename an account or customize its label after creation — this
+keeps entity ids fully predictable and collision-free. If you want a different
+account layout, delete the account and add a new one.
+
+Each device's Home Assistant "suggested area" is set to **ModelDeck**, so all
+ModelDeck devices can be grouped/filtered together in **Settings → Devices & services
+→ Devices**.
 
 **Previous (v0.1.5–v0.1.x):** `sensor.modeldeck_{provider}_{metric}` (no account segment).
 These are retired automatically on first startup in v0.2+.

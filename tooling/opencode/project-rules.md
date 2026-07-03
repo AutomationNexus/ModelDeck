@@ -80,7 +80,7 @@ Two independent version pointers, computed entirely by automation, never by git-
 | Channel | Format | Meaning |
 |---|---|---|
 | `modeldeck/config.yaml` | `X.Y.Z` (bare, no suffix) | Always exactly the parent release version. There is no packaging-revision suffix by design — an add-on-only packaging change (e.g. a `run.sh` fix with no parent release) is never released standalone; it ships bundled at the next real release. |
-| `modeldeck-nightly/config.yaml` | `X.Y.Z-nightly.YYYYMMDD[.N]` | X.Y.Z = parent dev version at build time. N = same-day re-roll counter. |
+| `modeldeck-nightly/config.yaml` | `X.Y.Z-nightly.YYYYMMDD.N` | X.Y.Z = parent dev version at build time. N = same-day re-roll counter, starting at `0` for the first build of the day. `bump_haos_version.py` always emits the counter now (a consistently-shaped version string is safer for HA's update comparator); `check_build_from.py`'s validator still accepts legacy bare `YYYYMMDD` pointers (no counter) for backward compatibility, but they are no longer generated. |
 
 Event-driven cascade (all automatic, no manual steps in the normal flow):
 

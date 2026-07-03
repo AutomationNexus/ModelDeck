@@ -10,6 +10,7 @@ from modeldeck.config.loader import (
     ProviderAccount,
     SecretsConfig,
     load_config,
+    next_account_id,
     slugify,
 )
 
@@ -209,6 +210,42 @@ def test_slugify_no_collision_without_existing():
     """Without existing set, collision avoidance is skipped."""
     assert slugify("test") == "test"
     assert slugify("test", None) == "test"
+
+
+# ---------------------------------------------------------------------------
+# next_account_id — auto-incrementing integer account ids
+#
+# Account labels are always server-generated ("{Provider Display Name} {n}")
+# and are never derived from free user text, so the account id is always a
+# plain integer. This structurally prevents the provider name from ever
+# appearing in the account id, so it can never double up with the
+# modeldeck_{provider_id}_{account_id} entity id template (e.g. the old
+# sensor.modeldeck_claude_claude_1_... bug class is impossible by
+# construction — there is no text-slug-stripping logic to get wrong).
+# ---------------------------------------------------------------------------
+
+
+def test_next_account_id_starts_at_one():
+    """No existing accounts for a provider -> first id is "1"."""
+    assert next_account_id(set()) == "1"
+    assert next_account_id(None) == "1"
+
+
+def test_next_account_id_increments():
+    """Existing numeric ids increment to the next integer."""
+    assert next_account_id({"1"}) == "2"
+    assert next_account_id({"1", "2"}) == "3"
+
+
+def test_next_account_id_fills_gaps():
+    """A deleted middle account leaves a gap that gets filled first."""
+    assert next_account_id({"1", "3"}) == "2"
+
+
+def test_next_account_id_ignores_non_numeric_ids():
+    """Legacy non-numeric ids (e.g. 'default', old custom slugs) are ignored."""
+    assert next_account_id({"default"}) == "1"
+    assert next_account_id({"default", "work", "1"}) == "2"
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ProviderMeta, AuthMode } from "../api/types";
+import type { Account, ProviderMeta, AuthMode } from "../api/types";
 import {
   reserveAccount,
   startOAuth,
@@ -13,6 +13,7 @@ type Step = "provider" | "mode" | "credentials" | "oauth" | "done";
 
 interface Props {
   providers: ProviderMeta[];
+  accounts: Account[];
   onDone: () => void;
   onCancel: () => void;
   onError: (msg: string) => void;
@@ -25,10 +26,22 @@ const PROVIDER_LABELS: Record<string, string> = {
   cursor: "Cursor",
 };
 
-export function AddAccountWizard({ providers, onDone, onCancel, onError }: Props) {
+export function AddAccountWizard({ providers, accounts, onDone, onCancel, onError }: Props) {
+  // Preview of the label the server will generate: "{Provider} {n}", where
+  // n is 1-indexed based on how many accounts already exist for that
+  // provider. This is not user-editable — labels are always
+  // server-generated (POST /accounts takes no label) so the account id is
+  // always a plain auto-incrementing integer and can never double up with
+  // the provider name in the entity id (e.g. modeldeck_claude_claude_1_...
+  // is structurally impossible). This is a best-effort client-side
+  // estimate for display only; the server response is authoritative.
+  function previewLabelFor(p: string): string {
+    const count = accounts.filter((a) => a.provider === p).length;
+    return `${PROVIDER_LABELS[p]} ${count + 1}`;
+  }
+
   const [step, setStep] = useState<Step>("provider");
   const [provider, setProvider] = useState("claude");
-  const [label, setLabel] = useState("");
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const [accountId, setAccountId] = useState("");
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
@@ -83,7 +96,7 @@ export function AddAccountWizard({ providers, onDone, onCancel, onError }: Props
     setBusy(true);
     setFieldError("");
     try {
-      const acct = await reserveAccount(provider, label || PROVIDER_LABELS[provider], authMode.id);
+      const acct = await reserveAccount(provider, authMode.id);
       setAccountId(acct.id);
       if (authMode.oauth_capable) {
         const res = await startOAuth(provider, acct.id);
@@ -175,15 +188,11 @@ export function AddAccountWizard({ providers, onDone, onCancel, onError }: Props
                   ))}
                 </select>
               </div>
-              <div className="form-group">
-                <label className="form-label">Label <span className="text-muted">(optional)</span></label>
-                <input
-                  type="text"
-                  value={label}
-                  placeholder={`e.g. Personal ${PROVIDER_LABELS[provider]}`}
-                  onChange={(e) => setLabel(e.target.value)}
-                />
-              </div>
+              <p className="text-muted" style={{ fontSize: "0.82rem" }}>
+                This account will be named <strong>{previewLabelFor(provider)}</strong>.
+                Account names are assigned automatically and aren't customizable,
+                so entity ids stay predictable and never collide.
+              </p>
               {/* Cursor no-OAuth note */}
               {noOAuthNote && (
                 <p style={{

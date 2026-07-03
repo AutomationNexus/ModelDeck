@@ -9,7 +9,6 @@ import {
   completeOAuth,
   pasteToken,
   switchToOAuth,
-  renameAccount,
   fetchAccountEntities,
 } from "../api/accounts";
 import { ApiError } from "../api/client";
@@ -24,7 +23,7 @@ interface Props {
   onError: (msg: string) => void;
 }
 
-type Modal = "none" | "delete" | "paste" | "oauth" | "rename" | "entities";
+type Modal = "none" | "delete" | "paste" | "oauth" | "entities";
 
 export function AccountCard({ account, providers, onRefresh, onSuccess, onError }: Props) {
   const { provider, id, label, enabled, auth_mode } = account;
@@ -48,12 +47,6 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
   const [pasteValues, setPasteValues] = useState<Record<string, string>>({});
   const [pasteBusy, setPasteBusy] = useState(false);
   const [pasteErr, setPasteErr] = useState("");
-
-  // Rename state
-  const [renameLabel, setRenameLabel] = useState(label || id);
-  const [renameUpdateId, setRenameUpdateId] = useState(false);
-  const [renameBusy, setRenameBusy] = useState(false);
-  const [renameErr, setRenameErr] = useState("");
 
   // Entities modal state
   const [entitiesData, setEntitiesData] = useState<AccountEntitiesResponse | null>(null);
@@ -182,27 +175,6 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
     }
   }
 
-  async function handleRename() {
-    const trimmed = renameLabel.trim();
-    if (!trimmed) { setRenameErr("Label must not be empty."); return; }
-    setRenameBusy(true);
-    setRenameErr("");
-    try {
-      const res = await renameAccount(provider, id, trimmed, renameUpdateId);
-      setModal("none");
-      onSuccess(
-        res.entity_id_changed
-          ? `Renamed to "${res.label}". Entity ID updated — restart service to apply MQTT changes.`
-          : `Renamed to "${res.label}". Restart service to update the HA friendly name.`,
-      );
-      onRefresh();
-    } catch (e) {
-      setRenameErr(e instanceof ApiError ? e.detail : String(e));
-    } finally {
-      setRenameBusy(false);
-    }
-  }
-
   async function handleOpenEntities() {
     setEntitiesErr("");
     setEntitiesLoading(true);
@@ -292,12 +264,6 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
           )}
           <button className="btn btn-secondary" onClick={() => { setPasteErr(""); setModal("paste"); }}>
             Paste credentials
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => { setRenameLabel(label || id); setRenameUpdateId(false); setRenameErr(""); setModal("rename"); }}
-          >
-            Rename
           </button>
           <button className="btn btn-secondary" onClick={handleOpenEntities}>
             View entities
@@ -408,57 +374,6 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
           </div>
         </div>
       )}
-      {/* Rename modal */}
-      {modal === "rename" && (
-        <div className="overlay" onClick={() => setModal("none")}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title">Rename account — {label || id}</span>
-              <button className="btn btn-ghost btn-icon" onClick={() => setModal("none")}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label">New label</label>
-                <input
-                  type="text"
-                  value={renameLabel}
-                  onChange={(e) => setRenameLabel(e.target.value)}
-                  autoComplete="off"
-                  autoFocus
-                />
-              </div>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", marginTop: "12px" }}>
-                <input
-                  id={`rename-update-id-${id}`}
-                  type="checkbox"
-                  checked={renameUpdateId}
-                  onChange={(e) => setRenameUpdateId(e.target.checked)}
-                  style={{ marginTop: "3px", flexShrink: 0 }}
-                />
-                <label htmlFor={`rename-update-id-${id}`} style={{ fontSize: "0.83rem", lineHeight: 1.5, cursor: "pointer" }}>
-                  <strong>Update Home Assistant entity ID</strong>
-                  <br />
-                  <span style={{ color: "var(--text-secondary)", fontSize: "0.78rem" }}>
-                    Off (recommended): entity_id stays stable — HA history and automations preserved.
-                    The friendly name updates on the next service restart.
-                    <br />
-                    On: entity_id is regenerated from the new label. ⚠ HA history and any automations
-                    or dashboards referencing the old entity_id will break.
-                  </span>
-                </label>
-              </div>
-              {renameErr && <p className="text-danger" style={{ fontSize: "0.82rem", marginTop: "8px" }}>{renameErr}</p>}
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setModal("none")}>Cancel</button>
-              <button className="btn btn-primary" disabled={renameBusy} onClick={handleRename}>
-                {renameBusy ? "Renaming…" : "Rename"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Entities modal */}
       {modal === "entities" && (
         <div className="overlay" onClick={() => setModal("none")}>

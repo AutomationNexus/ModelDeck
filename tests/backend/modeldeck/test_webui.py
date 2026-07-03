@@ -160,7 +160,7 @@ def test_create_account_known_provider_returns_201(monkeypatch):
     with TestClient(app) as tc:
         resp = tc.post(
             "/accounts",
-            json={"provider": "claude", "label": "Test", "auth_mode": "oauth"},
+            json={"provider": "claude", "auth_mode": "oauth"},
         )
     assert resp.status_code == 201
 
@@ -177,11 +177,87 @@ def test_create_account_returns_account_id_and_provider(monkeypatch):
     with TestClient(app) as tc:
         resp = tc.post(
             "/accounts",
-            json={"provider": "claude", "label": "Test", "auth_mode": "oauth"},
+            json={"provider": "claude", "auth_mode": "oauth"},
         )
     data = resp.json()
     assert "id" in data
     assert data["provider"] == "claude"
+
+
+def test_create_account_label_is_always_auto_generated(monkeypatch):
+    """Account labels are always server-generated ("{Provider} {n}") and
+    never customizable — even if a client sends a "label" field in the
+    request body, it has no effect (there is no such field on the model).
+
+    Regression for entity ids like sensor.modeldeck_claude_claude_1_...:
+    the account id is always a plain auto-incrementing integer, which
+    structurally can never re-embed the provider name.
+    """
+    cfg = _make_minimal_config()
+    secrets = _empty_secrets()
+    monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, secrets))
+    monkeypatch.setattr(
+        "modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None
+    )
+
+    app = create_app()
+    with TestClient(app) as tc:
+        resp = tc.post(
+            "/accounts",
+            # A client-supplied "label" is silently ignored — no such field
+            # exists on CreateAccountRequest.
+            json={"provider": "claude", "label": "claude 1", "auth_mode": "oauth"},
+        )
+    data = resp.json()
+    assert data["id"] == "1"
+    assert data["label"] == "Claude 1"
+    assert not data["id"].startswith("claude")
+
+
+def test_create_account_auto_numbers_per_provider(monkeypatch):
+    """First account for a provider is always id "1" with a Provider-Display-Name
+    label, regardless of what (if anything) is sent in the request body."""
+    cfg = _make_minimal_config()
+    secrets = _empty_secrets()
+    monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, secrets))
+    monkeypatch.setattr(
+        "modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None
+    )
+
+    app = create_app()
+    with TestClient(app) as tc:
+        resp = tc.post(
+            "/accounts",
+            json={"provider": "codex", "auth_mode": "api"},
+        )
+    data = resp.json()
+    assert data["label"] == "OpenAI Codex 1"
+    assert data["id"] == "1"
+
+
+def test_create_account_auto_numbers_increment_with_existing_accounts(monkeypatch):
+    """A second account for the same provider increments the id/label, and
+    both entity ids stay distinct."""
+    cfg = _make_minimal_config(
+        claude_accounts=[
+            {"id": "1", "label": "Claude 1", "enabled": True, "auth_mode": "oauth"}
+        ]
+    )
+    secrets = _empty_secrets()
+    monkeypatch.setattr("modeldeck.webui.app.load_config", lambda: (cfg, secrets))
+    monkeypatch.setattr(
+        "modeldeck.webui.app.upsert_account_in_config", lambda *a, **kw: None
+    )
+
+    app = create_app()
+    with TestClient(app) as tc:
+        resp = tc.post(
+            "/accounts",
+            json={"provider": "claude", "auth_mode": "oauth"},
+        )
+    data = resp.json()
+    assert data["label"] == "Claude 2"
+    assert data["id"] == "2"
 
 
 def test_create_account_unknown_provider_returns_400(monkeypatch):

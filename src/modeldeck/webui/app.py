@@ -38,8 +38,13 @@ from modeldeck.auth.oauth_flow import (
 )
 from modeldeck.auth.provider_specs import get_spec, supported_oauth_providers
 from modeldeck.collectors.metrics import base_metrics
-from modeldeck.config.loader import ProviderAccount, load_config, slugify
-from modeldeck.config.secrets_writer import move_account_secrets, write_account_secrets
+from modeldeck.config.loader import (
+    PROVIDER_DISPLAY_NAMES,
+    ProviderAccount,
+    load_config,
+    next_account_id,
+)
+from modeldeck.config.secrets_writer import write_account_secrets
 from modeldeck.core.logging import get_logger
 from modeldeck.core.paths import config_path
 from modeldeck.mqtt.discovery import (
@@ -64,7 +69,7 @@ _PROVIDERS = ("codex", "claude", "cursor")
 # Used by /providers endpoint so the UI renders the right inputs per mode.
 _PROVIDER_META: dict[str, dict[str, Any]] = {
     "codex": {
-        "name": "OpenAI Codex",
+        "name": PROVIDER_DISPLAY_NAMES["codex"],
         "oauth": True,
         # Default mode for the wizard — OAuth is recommended for independent sessions.
         "default_mode": "subscription",
@@ -97,7 +102,7 @@ _PROVIDER_META: dict[str, dict[str, Any]] = {
         ],
     },
     "claude": {
-        "name": "Claude",
+        "name": PROVIDER_DISPLAY_NAMES["claude"],
         "oauth": True,
         # Default mode for the wizard — OAuth gives an independent session.
         "default_mode": "oauth",
@@ -129,7 +134,7 @@ _PROVIDER_META: dict[str, dict[str, Any]] = {
         ],
     },
     "cursor": {
-        "name": "Cursor",
+        "name": PROVIDER_DISPLAY_NAMES["cursor"],
         "oauth": False,
         "default_mode": "personal",
         # no_oauth_note: shown on Cursor accounts in the UI.
@@ -242,10 +247,13 @@ def upsert_account_in_config(
 # ---------------------------------------------------------------------------
 
 class CreateAccountRequest(BaseModel):
-    """Create a new provider account."""
+    """Create a new provider account.
+
+    Labels are always server-generated ("{Provider Display Name} {n}") and
+    are not user-customizable — there is no ``label`` field here by design.
+    """
 
     provider: str
-    label: str
     auth_mode: str = "auto"
 
 
@@ -265,12 +273,6 @@ class OAuthCompleteRequest(BaseModel):
     session_key: str
     code_or_redirect: str
 
-
-class RenameAccountRequest(BaseModel):
-    """Rename an account label; optionally update the entity ID slug."""
-
-    label: str
-    update_entity_id: bool = False
 
 
 class PasteTokenRequest(BaseModel):
@@ -503,12 +505,13 @@ def create_app() -> FastAPI:
         except Exception:
             existing_ids = set()
 
-        account_id = slugify(body.label or body.provider, existing_ids)
+        account_id = next_account_id(existing_ids)
+        label = f"{PROVIDER_DISPLAY_NAMES[body.provider]} {account_id}"
         # Return the reserved id; config is written only after credentials are confirmed.
         return {
             "provider": body.provider,
             "id": account_id,
-            "label": body.label,
+            "label": label,
             "enabled": False,
             "auth_mode": body.auth_mode,
         }
@@ -639,101 +642,6 @@ def create_app() -> FastAPI:
         raw["providers"][provider] = accounts
         cfg_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
         return JSONResponse({"status": "ok", "enabled": bool(enabled)})
-
-    # -----------------------------------------------------------------------
-    # POST /accounts/{provider}/{account_id}/rename
-    # Rename account label; optionally regenerate the entity-ID slug.
-    #
-    # update_entity_id=false (default, recommended):
-    #   Only the label is updated.  entity_id / unique_id remain stable;
-    #   friendly name in HA updates on next service restart.
-    #
-    # update_entity_id=true:
-    #   New slug is derived from the new label.  Config id, secrets block,
-    #   and MQTT topics all move to the new slug on next service restart.
-    #   ⚠ HA history and automations referencing the old entity_id break.
-    # -----------------------------------------------------------------------
-
-    @app.post("/accounts/{provider}/{account_id}/rename")
-    async def rename_account(
-        provider: str, account_id: str, body: RenameAccountRequest
-    ) -> JSONResponse:
-        """Rename an account label, optionally updating the HA entity ID slug."""
-        if provider not in _PROVIDERS:
-            raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
-
-        new_label = body.label.strip()
-        if not new_label:
-            raise HTTPException(status_code=400, detail="Label must not be empty.")
-
-        cfg_path = config_path()
-        if not cfg_path.exists():
-            raise HTTPException(status_code=404, detail="Config not found.")
-
-        raw: dict[str, Any] = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
-        accounts: list[Any] = raw.get("providers", {}).get(provider, [])
-        target = next(
-            (a for a in accounts if isinstance(a, dict) and a.get("id") == account_id),
-            None,
-        )
-        if target is None:
-            raise HTTPException(
-                status_code=404, detail=f"Account {account_id} not found."
-            )
-
-        if not body.update_entity_id:
-            # Label-only rename — slug / entity_id stays stable.
-            target["label"] = new_label
-            raw["providers"][provider] = accounts
-            cfg_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
-            logger.info("Renamed %s/%s label -> %r", provider, account_id, new_label)
-            return JSONResponse({
-                "status": "ok",
-                "account_id": account_id,
-                "label": new_label,
-                "entity_id_changed": False,
-            })
-
-        # Entity-ID rename: derive new slug, check collisions.
-        existing_ids = {
-            a.get("id") for a in accounts
-            if isinstance(a, dict) and a.get("id") != account_id
-        }
-        new_id = slugify(new_label, existing_ids)
-
-        if new_id == account_id:
-            # Slug unchanged (e.g. label was "My Acc" → "My Acc !" → same slug).
-            target["label"] = new_label
-            raw["providers"][provider] = accounts
-            cfg_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
-            logger.info(
-                "Renamed %s/%s label only (slug unchanged) -> %r",
-                provider, account_id, new_label,
-            )
-            return JSONResponse({
-                "status": "ok",
-                "account_id": new_id,
-                "label": new_label,
-                "entity_id_changed": False,
-            })
-
-        # Slug changed — migrate config id and secrets block.
-        target["id"] = new_id
-        target["label"] = new_label
-        raw["providers"][provider] = accounts
-        cfg_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
-
-        move_account_secrets(provider, account_id, new_id)
-
-        logger.info(
-            "Renamed %s/%s -> %s (entity-id updated)", provider, account_id, new_id
-        )
-        return JSONResponse({
-            "status": "ok",
-            "account_id": new_id,
-            "label": new_label,
-            "entity_id_changed": True,
-        })
 
     # -----------------------------------------------------------------------
     # POST /accounts/{provider}/{account_id}/switch-oauth
