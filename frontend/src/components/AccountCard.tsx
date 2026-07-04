@@ -39,9 +39,7 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
   const [oauthErr, setOauthErr] = useState("");
 
   // Paste token state
-  const providerMeta = providers.find(
-    (p) => p.name.toLowerCase().includes(provider) || p.name.toLowerCase() === provider,
-  );
+  const providerMeta = providers.find((p) => p.id === provider);
   const currentMode = providerMeta?.auth_modes.find((m) => m.id === auth_mode)
     ?? providerMeta?.auth_modes[0];
   const [pasteValues, setPasteValues] = useState<Record<string, string>>({});

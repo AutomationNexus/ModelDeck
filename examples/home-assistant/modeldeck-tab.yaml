@@ -28,7 +28,7 @@ cards:
           yellow: 70
           red: 90
       - type: entities
-        title: OpenAI Codex
+        title: OpenAI
         show_header_toggle: false
         state_color: false
         entities:
@@ -41,7 +41,7 @@ cards:
           - entity: sensor.modeldeck_codex_default_plan
             name: Plan
       - type: entities
-        title: Codex Collector
+        title: OpenAI Collector
         show_header_toggle: false
         state_color: false
         card_mod:
@@ -158,13 +158,13 @@ cards:
         days_to_show: 1
         entities:
           - entity: sensor.modeldeck_codex_default_usage_percent
-            name: Codex
+            name: OpenAI
           - entity: sensor.modeldeck_claude_default_usage_percent
             name: Claude
           - entity: sensor.modeldeck_cursor_default_usage_percent
             name: Cursor
       - type: history-graph
-        title: Codex (7 days)
+        title: OpenAI (7 days)
         hours_to_show: 168
         entities:
           - entity: sensor.modeldeck_codex_default_usage_percent

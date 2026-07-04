@@ -6,18 +6,21 @@ import type { Account, ProviderMeta } from "../api/types";
 
 const PROVIDERS: ProviderMeta[] = [
   {
+    id: "claude",
     name: "Claude",
     oauth: true,
     default_mode: "oauth",
     auth_modes: [{ id: "oauth", label: "OAuth", fields: [], oauth_capable: true }],
   },
   {
-    name: "OpenAI Codex",
+    id: "codex",
+    name: "OpenAI",
     oauth: true,
     default_mode: "subscription",
     auth_modes: [{ id: "subscription", label: "Subscription", fields: [], oauth_capable: true }],
   },
   {
+    id: "cursor",
     name: "Cursor",
     oauth: false,
     default_mode: "personal",
@@ -32,6 +35,55 @@ beforeEach(() => {
 function noop() {
   /* no-op */
 }
+
+function selectProvider(id: string) {
+  const select = screen.getByRole("combobox") as HTMLSelectElement;
+  fireEvent.change(select, { target: { value: id } });
+}
+
+describe("AddAccountWizard — blank default provider", () => {
+  it("starts with no provider pre-selected (placeholder option)", () => {
+    render(
+      <AddAccountWizard
+        providers={PROVIDERS}
+        accounts={[]}
+        onDone={noop}
+        onCancel={noop}
+        onError={noop}
+      />,
+    );
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    expect(select.value).toBe("");
+  });
+
+  it("does not show a label preview until a provider is chosen", () => {
+    render(
+      <AddAccountWizard
+        providers={PROVIDERS}
+        accounts={[]}
+        onDone={noop}
+        onCancel={noop}
+        onError={noop}
+      />,
+    );
+    expect(screen.queryByText(/This account will be named/)).toBeNull();
+  });
+
+  it("disables Next until a provider is chosen", () => {
+    render(
+      <AddAccountWizard
+        providers={PROVIDERS}
+        accounts={[]}
+        onDone={noop}
+        onCancel={noop}
+        onError={noop}
+      />,
+    );
+    expect(screen.getByText("Next")).toBeDisabled();
+    selectProvider("claude");
+    expect(screen.getByText("Next")).not.toBeDisabled();
+  });
+});
 
 describe("AddAccountWizard — auto-generated, non-editable labels", () => {
   it("renders no editable label input at all", () => {
@@ -49,7 +101,7 @@ describe("AddAccountWizard — auto-generated, non-editable labels", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 
-  it("shows a preview of the server-generated label ('Claude 1') when no accounts exist yet", () => {
+  it("shows a preview of the server-generated label ('Claude 1') once Claude is selected", () => {
     render(
       <AddAccountWizard
         providers={PROVIDERS}
@@ -59,6 +111,7 @@ describe("AddAccountWizard — auto-generated, non-editable labels", () => {
         onError={noop}
       />,
     );
+    selectProvider("claude");
     expect(screen.getByText("Claude 1")).toBeInTheDocument();
   });
 
@@ -76,12 +129,13 @@ describe("AddAccountWizard — auto-generated, non-editable labels", () => {
         onError={noop}
       />,
     );
+    selectProvider("claude");
     expect(screen.getByText("Claude 3")).toBeInTheDocument();
   });
 
   it("updates the preview when switching provider", () => {
     const accounts: Account[] = [
-      { provider: "codex", id: "1", label: "OpenAI Codex 1", enabled: true, auth_mode: "subscription" },
+      { provider: "codex", id: "1", label: "OpenAI 1", enabled: true, auth_mode: "subscription" },
     ];
     render(
       <AddAccountWizard
@@ -92,9 +146,8 @@ describe("AddAccountWizard — auto-generated, non-editable labels", () => {
         onError={noop}
       />,
     );
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
-    fireEvent.change(select, { target: { value: "codex" } });
-    expect(screen.getByText("OpenAI Codex 2")).toBeInTheDocument();
+    selectProvider("codex");
+    expect(screen.getByText("OpenAI 2")).toBeInTheDocument();
   });
 
   it("calls reserveAccount with only provider and auth_mode — never a label", async () => {
@@ -110,6 +163,7 @@ describe("AddAccountWizard — auto-generated, non-editable labels", () => {
         onError={noop}
       />,
     );
+    selectProvider("claude");
     fireEvent.click(screen.getByText("Next")); // provider step -> mode step
     fireEvent.click(await screen.findByText("Next")); // mode step -> reserveAccount
     await waitFor(() => expect(reserveSpy).toHaveBeenCalled());

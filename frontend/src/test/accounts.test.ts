@@ -4,7 +4,8 @@ import type { ProviderMeta } from "../api/types";
 
 const PROVIDERS: ProviderMeta[] = [
   {
-    name: "OpenAI Codex",
+    id: "codex",
+    name: "OpenAI",
     oauth: true,
     auth_modes: [
       { id: "subscription", label: "Subscription", fields: [], oauth_capable: true },
@@ -12,6 +13,7 @@ const PROVIDERS: ProviderMeta[] = [
     ],
   },
   {
+    id: "claude",
     name: "Claude",
     oauth: true,
     auth_modes: [
@@ -20,6 +22,7 @@ const PROVIDERS: ProviderMeta[] = [
     ],
   },
   {
+    id: "cursor",
     name: "Cursor",
     oauth: false,
     auth_modes: [
@@ -30,17 +33,17 @@ const PROVIDERS: ProviderMeta[] = [
 ];
 
 describe("getAuthModes", () => {
-  it("returns modes for claude by name substring", () => {
+  it("returns modes for claude by id", () => {
     const modes = getAuthModes(PROVIDERS, "claude");
     expect(modes.map((m) => m.id)).toEqual(["oauth", "cookie"]);
   });
 
-  it("returns modes for codex by name substring", () => {
+  it("returns modes for codex by id", () => {
     const modes = getAuthModes(PROVIDERS, "codex");
     expect(modes.map((m) => m.id)).toEqual(["subscription", "api"]);
   });
 
-  it("returns modes for cursor by name substring", () => {
+  it("returns modes for cursor by id", () => {
     const modes = getAuthModes(PROVIDERS, "cursor");
     expect(modes.map((m) => m.id)).toEqual(["personal", "enterprise"]);
   });

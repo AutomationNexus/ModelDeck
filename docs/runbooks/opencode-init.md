@@ -14,7 +14,7 @@ Use this prompt when handing the ModelDeck repo to opencode or another coding ag
 ```text
 You are working in C:\Users\Tahasanul\Desktop\RemoteRepo\GitHub\ModelDeck.
 
-This is the ModelDeck Python service: a Dockerized AI usage and quota bridge for Home Assistant. It polls OpenAI Codex, Claude, and Cursor for account usage and publishes MQTT Discovery sensors. Secrets, provider tokens, API keys, session cookies, and local operator files must stay out of git.
+This is the ModelDeck Python service: a Dockerized AI usage and quota bridge for Home Assistant. It polls OpenAI, Claude, and Cursor for account usage and publishes MQTT Discovery sensors. Secrets, provider tokens, API keys, session cookies, and local operator files must stay out of git.
 
 This repo is also a Home Assistant add-on repository: `modeldeck/` (stable channel) and
 `modeldeck-nightly/` (nightly channel) are separate, independently versioned add-ons that

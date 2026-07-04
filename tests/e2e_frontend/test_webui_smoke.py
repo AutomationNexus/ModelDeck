@@ -59,7 +59,7 @@ class TestAPIEndpoints:
         data = resp.json()
         assert "providers" in data
         names = {p["name"] for p in data["providers"]}
-        assert {"Claude", "OpenAI Codex", "Cursor"} == names
+        assert {"Claude", "OpenAI", "Cursor"} == names
 
     def test_providers_auth_modes_have_fields(self, page: Page) -> None:
         """Each auth mode from /providers contains id, label, fields, oauth_capable."""

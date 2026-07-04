@@ -93,11 +93,11 @@ export async function fetchAccountEntities(
 
 /** Return all auth modes for a provider by id. */
 export function getAuthModes(providers: ProviderMeta[], providerId: string): AuthMode[] {
-  return providers.find((p) => p.name.toLowerCase().includes(providerId) || p.name === providerId)
-    ?.auth_modes ?? [];
+  return getProviderMeta(providers, providerId)?.auth_modes ?? [];
 }
 
-/** Return provider meta for a given provider id substring. */
+/** Return provider meta for a given stable provider id (e.g. "codex"). */
 export function getProviderMeta(providers: ProviderMeta[], providerId: string): ProviderMeta | undefined {
-  return providers.find((p) => p.name.toLowerCase().includes(providerId) || p.name === providerId);
+  if (!providerId) return undefined;
+  return providers.find((p) => p.id === providerId);
 }

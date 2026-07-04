@@ -21,6 +21,7 @@ export interface AuthMode {
 }
 
 export interface ProviderMeta {
+  id: string;
   name: string;
   oauth: boolean;
   default_mode?: string;

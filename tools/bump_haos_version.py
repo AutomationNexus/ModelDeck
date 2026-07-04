@@ -19,7 +19,28 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 NIGHTLY_DIR = "modeldeck-nightly"
-NIGHTLY_VERSION_RE = re.compile(r"^(\d+\.\d+\.\d+)-nightly\.(\d{8})(?:\.(\d+))?$")
+
+# Matches all nightly version shapes we've ever published:
+#   X.Y.Z-nightly.YYYYMMDD          (legacy bare, no counter)
+#   X.Y.Z-nightly.YYYYMMDD.N        (legacy dot-counter, N = re-roll count)
+#   X.Y.Z-nightly.YYYYMMDDNN        (current: merged 2-digit counter, no second dot)
+#
+# The merged (dot-free) form matters for correctness, not just style: HA Supervisor's
+# add-on Update button uses the `awesomeversion` library to decide if a new version is
+# actually newer. awesomeversion does not recognize "nightly" as one of its known
+# modifier types (rc/beta/alpha/dev), so it falls back to comparing the raw digits
+# after "nightly." as long as there is exactly ONE dot-separated segment there. A
+# second dot (the old `.N` counter) makes that segment unparseable, and
+# awesomeversion then returns False for BOTH `newer > older` and `newer < older` —
+# i.e. it can no longer tell the new build is newer at all, so HA shows "update
+# available" (from a cruder equality check elsewhere) but leaves the Update button
+# disabled. Verified empirically against the exact awesomeversion version HA
+# Supervisor/Core pin (25.8.0): merging the counter into one digit run compares
+# correctly both same-day and cross-day, including migrating from an
+# already-installed legacy (bare or dot-counter) version.
+NIGHTLY_VERSION_RE = re.compile(
+    r"^(\d+\.\d+\.\d+)-nightly\.(\d{8})(?:\.(\d+)|(\d{2,}))?$"
+)
 
 
 def _config_path(root: Path, folder: str) -> Path:
@@ -71,16 +92,18 @@ def nightly_roll(
     current = str(addon.get("version", ""))
     today = datetime.now(UTC).strftime("%Y%m%d")
 
-    build_num = 0
+    build_num = 1
     match = NIGHTLY_VERSION_RE.match(current)
     if match and match.group(1) == parent_version and match.group(2) == today:
-        build_num = int(match.group(3) or 0) + 1
+        existing_n = match.group(3) or match.group(4)
+        build_num = int(existing_n or 0) + 1
 
-    # Always emit an explicit build counter (first build of the day is `.0`) -- a
-    # consistently-shaped version string is safer for HA's update comparator than
-    # sometimes-bare/sometimes-suffixed. NIGHTLY_VERSION_RE above still accepts legacy
-    # bare (no-counter) pointers so old, already-published values roll forward correctly.
-    new_version = f"{parent_version}-nightly.{today}.{build_num}"
+    # Merge the same-day build counter directly into the date digits (no second
+    # dot) — see the NIGHTLY_VERSION_RE comment above for why this matters for
+    # HA's Update button. NIGHTLY_VERSION_RE still accepts legacy bare and
+    # dot-counter pointers on read, so an already-published value of either
+    # legacy shape rolls forward correctly into this format.
+    new_version = f"{parent_version}-nightly.{today}{build_num:02d}"
 
     _save_version(config_path, addon, new_version)
     body = note.strip() or "Nightly build roll."
