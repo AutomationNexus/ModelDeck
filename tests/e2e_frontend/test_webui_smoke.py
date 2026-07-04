@@ -152,12 +152,24 @@ class TestAddAccountWizard:
 
     @_spa
     def test_wizard_can_advance_to_mode_step(self, page: Page) -> None:
-        """Clicking Next in step 1 advances to auth mode selection."""
+        """Selecting a provider then clicking Next in step 1 advances to auth mode selection."""
         page.goto(BASE)
         page.wait_for_selector(".skeleton-card", state="detached", timeout=10_000)
         page.get_by_text("+ Add account").click()
+        # No provider is pre-selected — Next stays disabled until one is chosen.
+        page.locator("select").first.select_option("claude")
         page.get_by_role("button", name="Next").click()
         expect(page.locator("input[type='radio']").first).to_be_visible(timeout=5_000)
+
+    @_spa
+    def test_wizard_next_disabled_until_provider_chosen(self, page: Page) -> None:
+        """Step 1's Next button is disabled until a real provider is selected."""
+        page.goto(BASE)
+        page.wait_for_selector(".skeleton-card", state="detached", timeout=10_000)
+        page.get_by_text("+ Add account").click()
+        expect(page.get_by_role("button", name="Next")).to_be_disabled()
+        page.locator("select").first.select_option("codex")
+        expect(page.get_by_role("button", name="Next")).to_be_enabled()
 
     @_spa
     def test_wizard_cancel_closes_modal(self, page: Page) -> None:
