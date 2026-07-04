@@ -1,4 +1,4 @@
-# Single-provider usage stack (OpenAI Codex example)
+# Single-provider usage stack (OpenAI example)
 # Copy and swap modeldeck_codex_* → modeldeck_claude_* or modeldeck_cursor_* for other providers
 # See modeldeck-tab.yaml for all three providers, or overview-compact.yaml for a summary row
 
@@ -6,7 +6,7 @@ type: vertical-stack
 cards:
   - type: gauge
     entity: sensor.modeldeck_codex_default_usage_percent
-    name: Codex Usage
+    name: OpenAI Usage
     min: 0
     max: 100
     needle: true
@@ -15,7 +15,7 @@ cards:
       yellow: 70
       red: 90
   - type: entities
-    title: OpenAI Codex
+    title: OpenAI
     entities:
       - entity: sensor.modeldeck_codex_default_usage_weekly_percent
         name: Weekly Usage

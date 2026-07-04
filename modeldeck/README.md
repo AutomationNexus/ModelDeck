@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/automationnexus/ModelDeck/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-ModelDeck-blue)](https://automationnexus.github.io/ModelDeck/)
 
-ModelDeck polls your **OpenAI Codex**, **Claude**, and **Cursor** accounts for usage and quota data, then publishes **MQTT Discovery** sensors in Home Assistant (for example `sensor.modeldeck_codex_usage_percent`, `sensor.modeldeck_claude_usage_weekly_percent`).
+ModelDeck polls your **OpenAI**, **Claude**, and **Cursor** accounts for usage and quota data, then publishes **MQTT Discovery** sensors in Home Assistant (for example `sensor.modeldeck_codex_usage_percent`, `sensor.modeldeck_claude_usage_weekly_percent`).
 
 There is no web dashboard inside the add-on. After configuration, check **Settings → Devices & services → MQTT** for ModelDeck devices and sensors.
 
@@ -69,7 +69,7 @@ Two toggles control **different** mechanisms — they are not two ways to “sav
 
 ---
 
-## OpenAI Codex
+## OpenAI
 
 Turn on **Enable Codex collector**, then pick **Auth mode**:
 

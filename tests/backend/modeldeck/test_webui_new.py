@@ -113,7 +113,7 @@ class TestProvidersEndpoint:
         data = client.get("/providers").json()
         names = {p["name"] for p in data["providers"]}
         assert "Claude" in names
-        assert "OpenAI Codex" in names
+        assert "OpenAI" in names
         assert "Cursor" in names
 
     def test_auth_modes_have_required_keys(self, monkeypatch, tmp_path):

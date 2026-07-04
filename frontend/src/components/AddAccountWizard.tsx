@@ -21,7 +21,7 @@ interface Props {
 
 const PROVIDER_IDS = ["codex", "claude", "cursor"];
 const PROVIDER_LABELS: Record<string, string> = {
-  codex: "OpenAI Codex",
+  codex: "OpenAI",
   claude: "Claude",
   cursor: "Cursor",
 };
@@ -41,7 +41,11 @@ export function AddAccountWizard({ providers, accounts, onDone, onCancel, onErro
   }
 
   const [step, setStep] = useState<Step>("provider");
-  const [provider, setProvider] = useState("claude");
+  // No provider is pre-selected — the user must explicitly choose one from
+  // the placeholder <select> below. Defaulting to any real provider (e.g.
+  // always "claude") is misleading since it doesn't reflect a deliberate
+  // choice and can lead to accidentally adding the wrong provider's account.
+  const [provider, setProvider] = useState("");
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const [accountId, setAccountId] = useState("");
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
@@ -70,6 +74,7 @@ export function AddAccountWizard({ providers, accounts, onDone, onCancel, onErro
 
   // Pre-select default mode when entering mode step.
   function handleGoToModeStep() {
+    if (!provider) return;
     if (authModes.length > 0 && !authMode) {
       const defaultId = providerMeta?.default_mode ?? authModes[0]?.id;
       const defaultMode = authModes.find((m) => m.id === defaultId) ?? authModes[0] ?? null;
@@ -183,16 +188,19 @@ export function AddAccountWizard({ providers, accounts, onDone, onCancel, onErro
               <div className="form-group">
                 <label className="form-label">Provider</label>
                 <select value={provider} onChange={(e) => handleProviderChange(e.target.value)}>
+                  <option value="" disabled>Select provider…</option>
                   {PROVIDER_IDS.map((id) => (
                     <option key={id} value={id}>{PROVIDER_LABELS[id]}</option>
                   ))}
                 </select>
               </div>
-              <p className="text-muted" style={{ fontSize: "0.82rem" }}>
-                This account will be named <strong>{previewLabelFor(provider)}</strong>.
-                Account names are assigned automatically and aren't customizable,
-                so entity ids stay predictable and never collide.
-              </p>
+              {provider && (
+                <p className="text-muted" style={{ fontSize: "0.82rem" }}>
+                  This account will be named <strong>{previewLabelFor(provider)}</strong>.
+                  Account names are assigned automatically and aren't customizable,
+                  so entity ids stay predictable and never collide.
+                </p>
+              )}
               {/* Cursor no-OAuth note */}
               {noOAuthNote && (
                 <p style={{
@@ -210,7 +218,7 @@ export function AddAccountWizard({ providers, accounts, onDone, onCancel, onErro
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleGoToModeStep}>Next</button>
+              <button className="btn btn-primary" disabled={!provider} onClick={handleGoToModeStep}>Next</button>
             </div>
           </>
         )}

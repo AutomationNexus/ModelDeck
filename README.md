@@ -9,7 +9,7 @@
 [![GHCR](https://img.shields.io/badge/ghcr-modeldeck:latest-blue)](https://github.com/automationnexus/ModelDeck/pkgs/container/modeldeck)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**ModelDeck** is a Dockerized AI usage and quota bridge for Home Assistant. It collects account-level usage, limits, reset times, credits, and plan data from **OpenAI Codex**, **Claude**, and **Cursor**, then publishes MQTT Discovery sensors for dashboards and automations.
+**ModelDeck** is a Dockerized AI usage and quota bridge for Home Assistant. It collects account-level usage, limits, reset times, credits, and plan data from **OpenAI**, **Claude**, and **Cursor**, then publishes MQTT Discovery sensors for dashboards and automations.
 
 **Status:** **`v0.0.1`** on `main` (`:latest`); integration builds on `dev` (`:nightly`).
 
@@ -45,7 +45,7 @@ retired automatically on first startup.
    `sensor.modeldeck_codex_default_usage_percent`,
    `sensor.modeldeck_claude_default_status`.
 
-Each account gets its own HA device: **OpenAI Codex (default)**, **Claude (default)**, etc.
+Each account gets its own HA device: **OpenAI (default)**, **Claude (default)**, etc.
 
 ModelDeck does **not** log you in. Copy credentials once; the service reuses them on each poll. OAuth-based modes can auto-refresh tokens when configured.
 
@@ -85,7 +85,7 @@ authenticated through the web UI.
 Pick the auth mode that matches **how you pay**, then copy the listed values into
 `config/secrets.yaml` (Docker) or the add-on **Configuration** tab (HAOS).
 
-### OpenAI Codex
+### OpenAI
 
 | Auth mode | Account type | What to copy | Where to get it |
 |-----------|--------------|--------------|-----------------|

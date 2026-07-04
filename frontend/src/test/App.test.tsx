@@ -6,6 +6,7 @@ import type { Account, ProviderMeta } from "../api/types";
 
 const MOCK_PROVIDERS: ProviderMeta[] = [
   {
+    id: "claude",
     name: "Claude",
     oauth: true,
     auth_modes: [
@@ -18,13 +19,15 @@ const MOCK_PROVIDERS: ProviderMeta[] = [
     ],
   },
   {
-    name: "OpenAI Codex",
+    id: "codex",
+    name: "OpenAI",
     oauth: true,
     auth_modes: [
       { id: "subscription", label: "Subscription", fields: [], oauth_capable: true },
     ],
   },
   {
+    id: "cursor",
     name: "Cursor",
     oauth: false,
     auth_modes: [

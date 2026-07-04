@@ -5,7 +5,8 @@ import type { ProviderMeta } from "../api/types";
 // Simulated /providers response matching new server metadata.
 const PROVIDERS: ProviderMeta[] = [
   {
-    name: "OpenAI Codex",
+    id: "codex",
+    name: "OpenAI",
     oauth: true,
     default_mode: "subscription",
     oauth_paste_back_note:
@@ -29,6 +30,7 @@ const PROVIDERS: ProviderMeta[] = [
     ],
   },
   {
+    id: "claude",
     name: "Claude",
     oauth: true,
     default_mode: "oauth",
@@ -56,6 +58,7 @@ const PROVIDERS: ProviderMeta[] = [
     ],
   },
   {
+    id: "cursor",
     name: "Cursor",
     oauth: false,
     default_mode: "personal",

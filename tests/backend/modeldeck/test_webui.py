@@ -106,7 +106,7 @@ def test_providers_contains_claude(client):
 def test_providers_contains_codex(client):
     data = client.get("/providers").json()
     names = [p["name"] for p in data["providers"]]
-    assert "OpenAI Codex" in names
+    assert "OpenAI" in names
 
 
 def test_providers_contains_cursor(client):
@@ -231,7 +231,7 @@ def test_create_account_auto_numbers_per_provider(monkeypatch):
             json={"provider": "codex", "auth_mode": "api"},
         )
     data = resp.json()
-    assert data["label"] == "OpenAI Codex 1"
+    assert data["label"] == "OpenAI 1"
     assert data["id"] == "1"
 
 

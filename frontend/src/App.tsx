@@ -124,7 +124,7 @@ export function App() {
                 <div key={p} style={{ marginBottom: 28 }}>
                   <div className="section-header" style={{ marginBottom: 10 }}>
                     <span className="section-title">{
-                      p === "codex" ? "OpenAI Codex" : p === "claude" ? "Claude" : "Cursor"
+                      p === "codex" ? "OpenAI" : p === "claude" ? "Claude" : "Cursor"
                     }</span>
                     <span className="text-muted">{grouped[p].length} account{grouped[p].length !== 1 ? "s" : ""}</span>
                   </div>

@@ -41,7 +41,7 @@ def parse_codex_wham_usage(payload: dict[str, Any], provider_id: str = "codex") 
     credits_balance = credits.get("balance")
     return ProviderSnapshot(
         provider_id=provider_id,
-        display_name="OpenAI Codex",
+        display_name="OpenAI",
         collected_at=now,
         status=CollectorStatus.OK,
         usage_percent=_window_percent(primary if isinstance(primary, dict) else None),
