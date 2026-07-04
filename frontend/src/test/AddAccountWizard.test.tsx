@@ -101,7 +101,7 @@ describe("AddAccountWizard — auto-generated, non-editable labels", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 
-  it("shows a preview of the server-generated label ('Claude 1') once Claude is selected", () => {
+  it("shows a preview of the server-generated label ('Claude - 1') once Claude is selected", () => {
     render(
       <AddAccountWizard
         providers={PROVIDERS}
@@ -112,13 +112,13 @@ describe("AddAccountWizard — auto-generated, non-editable labels", () => {
       />,
     );
     selectProvider("claude");
-    expect(screen.getByText("Claude 1")).toBeInTheDocument();
+    expect(screen.getByText("Claude - 1")).toBeInTheDocument();
   });
 
   it("increments the preview index based on existing accounts for that provider", () => {
     const accounts: Account[] = [
-      { provider: "claude", id: "1", label: "Claude 1", enabled: true, auth_mode: "oauth" },
-      { provider: "claude", id: "2", label: "Claude 2", enabled: true, auth_mode: "oauth" },
+      { provider: "claude", id: "1", label: "Claude - 1", enabled: true, auth_mode: "oauth" },
+      { provider: "claude", id: "2", label: "Claude - 2", enabled: true, auth_mode: "oauth" },
     ];
     render(
       <AddAccountWizard
@@ -130,12 +130,12 @@ describe("AddAccountWizard — auto-generated, non-editable labels", () => {
       />,
     );
     selectProvider("claude");
-    expect(screen.getByText("Claude 3")).toBeInTheDocument();
+    expect(screen.getByText("Claude - 3")).toBeInTheDocument();
   });
 
   it("updates the preview when switching provider", () => {
     const accounts: Account[] = [
-      { provider: "codex", id: "1", label: "OpenAI 1", enabled: true, auth_mode: "subscription" },
+      { provider: "codex", id: "1", label: "OpenAI - 1", enabled: true, auth_mode: "subscription" },
     ];
     render(
       <AddAccountWizard
@@ -147,13 +147,13 @@ describe("AddAccountWizard — auto-generated, non-editable labels", () => {
       />,
     );
     selectProvider("codex");
-    expect(screen.getByText("OpenAI 2")).toBeInTheDocument();
+    expect(screen.getByText("OpenAI - 2")).toBeInTheDocument();
   });
 
   it("calls reserveAccount with only provider and auth_mode — never a label", async () => {
     const reserveSpy = vi
       .spyOn(accountsApi, "reserveAccount")
-      .mockResolvedValue({ provider: "claude", id: "1", label: "Claude 1", enabled: false, auth_mode: "oauth" });
+      .mockResolvedValue({ provider: "claude", id: "1", label: "Claude - 1", enabled: false, auth_mode: "oauth" });
     render(
       <AddAccountWizard
         providers={PROVIDERS}

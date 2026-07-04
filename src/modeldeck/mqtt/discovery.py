@@ -158,6 +158,13 @@ def build_discovery_payload(
     account_id = snapshot.account_id
     object_id = discovery_object_id(provider_id, account_id, metric)
     unique_id = metric_unique_id(provider_id, account_id, metric)
+    device_name = snapshot.account_label or snapshot.display_name
+    if snapshot.account_alias:
+        # Alias is a purely cosmetic nickname (never used for entity ids/unique
+        # ids/topics — those are built from provider_id/account_id above) shown
+        # alongside the label so multiple accounts are easier to tell apart in
+        # HA's Devices & services page, e.g. "Claude - 1 (Work)".
+        device_name = f"{device_name} ({snapshot.account_alias})"
     payload: dict[str, Any] = {
         "name": meta["name_suffix"],
         "unique_id": unique_id,
@@ -166,7 +173,7 @@ def build_discovery_payload(
         "state_topic": state_topic(mqtt, provider_id, account_id, metric),
         "device": {
             "identifiers": [f"modeldeck_{provider_id}_{account_id}"],
-            "name": snapshot.account_label or snapshot.display_name,
+            "name": device_name,
             "manufacturer": "ModelDeck",
             "model": "AI Quota Monitor",
             "suggested_area": "ModelDeck",

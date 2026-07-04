@@ -50,6 +50,11 @@ class ProviderAccount(BaseModel):
 
     id: str
     label: str = ""
+    # User-editable nickname shown alongside the (non-editable, auto-generated)
+    # label, e.g. "Claude - 1 (Work)". Purely cosmetic — never used to derive
+    # entity ids, unique ids, or MQTT topics. Settable only via the web UI's
+    # edit-alias action (PATCH /accounts/{provider}/{account_id}).
+    alias: str = ""
     enabled: bool = False
     auth_mode: str = "auto"
     credential_path: str | None = None
@@ -161,13 +166,61 @@ def slugify(label: str, existing: set[str] | None = None) -> str:
 
 
 # Human-readable provider display names, used to build the auto-generated
-# account label ("{Provider Display Name} {n}"). Single source of truth
+# account label ("{Provider Display Name} - {n}"). Single source of truth
 # shared by the web UI (POST /accounts) and the CLI (login/accounts add).
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     "codex": "OpenAI",
     "claude": "Claude",
     "cursor": "Cursor",
 }
+
+
+def migrate_legacy_account_labels(cfg_path: Path) -> bool:
+    """Rewrite legacy auto-generated account labels to the current format.
+
+    Migrates the old "{Provider} {n}" format to the current
+    "{Provider} - {n}" format, in place on disk. Only rewrites labels that
+    exactly match the old server-generated pattern for a plain-integer
+    account id — custom labels (e.g. a legacy "default" account, or an HA
+    add-on's ``account_label`` option value) are never touched, so this can
+    never clobber user data that doesn't fit the auto-generated pattern.
+
+    Idempotent and safe to call on every process startup: a no-op once an
+    account is already migrated (or was never in the old format). Returns
+    True if the file was rewritten, False otherwise (including on any read
+    error, where nothing is touched).
+    """
+    if not cfg_path.exists():
+        return False
+    try:
+        raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return False
+    if not isinstance(raw, dict):
+        return False
+    providers = raw.get("providers")
+    if not isinstance(providers, dict):
+        return False
+
+    changed = False
+    for provider_id, display_name in PROVIDER_DISPLAY_NAMES.items():
+        accounts = providers.get(provider_id)
+        if not isinstance(accounts, list):
+            continue
+        for acct in accounts:
+            if not isinstance(acct, dict):
+                continue
+            account_id = str(acct.get("id", ""))
+            if not account_id.isdigit():
+                continue
+            old_label = f"{display_name} {account_id}"
+            if acct.get("label") == old_label:
+                acct["label"] = f"{display_name} - {account_id}"
+                changed = True
+
+    if changed:
+        cfg_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    return changed
 
 
 def next_account_id(existing: set[str] | None = None) -> str:

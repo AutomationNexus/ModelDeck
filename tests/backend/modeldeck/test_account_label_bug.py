@@ -1,7 +1,7 @@
 """Regression tests for the account-label bug.
 
 A brand-new wizard account (not yet on disk) must get the server-generated
-"{Provider Display Name} {n}" label, never the bare account_id, whether it
+"{Provider Display Name} - {n}" label, never the bare account_id, whether it
 goes through the OAuth path or the paste-credentials path. Re-pasting
 credentials on an EXISTING account must preserve its label.
 
@@ -65,7 +65,7 @@ class TestNewAccountLabelBug:
         client = _make_new_account_client(monkeypatch, tmp_path, provider="codex")
         resp = client.post("/accounts/codex/1/oauth/start")
         assert resp.status_code == 200
-        assert resp.json()["label"] == "OpenAI 1"
+        assert resp.json()["label"] == "OpenAI - 1"
 
     def test_oauth_complete_new_account_persists_generated_label(self, monkeypatch, tmp_path):
         """The label returned by oauth_start must be what actually gets persisted
@@ -95,7 +95,7 @@ class TestNewAccountLabelBug:
             json={"session_key": session_key, "code_or_redirect": "code123"},
         )
         assert resp.status_code == 200
-        assert upserted.get("label") == "OpenAI 1"
+        assert upserted.get("label") == "OpenAI - 1"
 
     def test_paste_token_new_account_gets_generated_label(self, monkeypatch, tmp_path):
         """paste_token for a brand-new (not-yet-on-disk) account must upsert with
@@ -113,7 +113,7 @@ class TestNewAccountLabelBug:
             json={"field": "session_token", "value": "sometoken"},
         )
         assert resp.status_code == 200
-        assert upserted.get("label") == "Cursor 1"
+        assert upserted.get("label") == "Cursor - 1"
 
     def test_paste_token_existing_account_preserves_label(self, monkeypatch, tmp_path):
         """Re-pasting credentials on an already-existing account must NOT

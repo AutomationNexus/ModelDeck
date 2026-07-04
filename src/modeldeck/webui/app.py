@@ -42,6 +42,7 @@ from modeldeck.config.loader import (
     PROVIDER_DISPLAY_NAMES,
     ProviderAccount,
     load_config,
+    migrate_legacy_account_labels,
     next_account_id,
 )
 from modeldeck.config.secrets_writer import write_account_secrets
@@ -64,6 +65,9 @@ _OAUTH_SESSIONS: dict[str, dict[str, Any]] = {}
 _SESSION_TTL = 300  # seconds
 
 _PROVIDERS = ("codex", "claude", "cursor")
+
+# Max length for the user-editable, purely-cosmetic account alias.
+_MAX_ALIAS_LEN = 40
 
 # Per-provider auth modes and their required credential fields.
 # Used by /providers endpoint so the UI renders the right inputs per mode.
@@ -194,6 +198,7 @@ def _load_accounts() -> list[dict[str, Any]]:
                 "provider": provider,
                 "id": acct.id,
                 "label": acct.label,
+                "alias": acct.alias,
                 "enabled": acct.enabled,
                 "auth_mode": acct.auth_mode,
             })
@@ -252,7 +257,7 @@ def upsert_account_in_config(
 class CreateAccountRequest(BaseModel):
     """Create a new provider account.
 
-    Labels are always server-generated ("{Provider Display Name} {n}") and
+    Labels are always server-generated ("{Provider Display Name} - {n}") and
     are not user-customizable — there is no ``label`` field here by design.
     """
 
@@ -291,6 +296,7 @@ class AccountResponse(BaseModel):
     provider: str
     id: str
     label: str
+    alias: str = ""
     enabled: bool
     auth_mode: str
 
@@ -301,6 +307,15 @@ class AccountResponse(BaseModel):
 
 def create_app() -> FastAPI:
     """Create and configure the ModelDeck web UI FastAPI application."""
+    # One-time, idempotent migration of any legacy "{Provider} {n}" labels
+    # (no dash) still on disk to the current "{Provider} - {n}" format.
+    # Never raises — a migration failure must not prevent the app from
+    # starting.
+    try:
+        migrate_legacy_account_labels(config_path())
+    except Exception:
+        logger.exception("Legacy account label migration failed; continuing without it.")
+
     app = FastAPI(
         title="ModelDeck",
         description="AI quota monitor — account management UI",
@@ -369,11 +384,11 @@ def create_app() -> FastAPI:
         url = build_authorize_url(spec, verifier, state)
 
         # Default for a brand-new wizard account (not yet written to disk) is
-        # the same server-generated "{Provider Display Name} {n}" label that
+        # the same server-generated "{Provider Display Name} - {n}" label that
         # POST /accounts already returned as a preview — never the bare
         # account_id. If the account already exists on disk (e.g. re-login),
         # its stored label wins.
-        label = f"{PROVIDER_DISPLAY_NAMES.get(provider, provider)} {account_id}"
+        label = f"{PROVIDER_DISPLAY_NAMES.get(provider, provider)} - {account_id}"
         try:
             config, _ = load_config()
             accounts = getattr(config.providers, provider, [])
@@ -481,10 +496,10 @@ def create_app() -> FastAPI:
 
         # Resolve auth_mode and label from existing config; default label for
         # a brand-new wizard account (not yet on disk) is the same
-        # server-generated "{Provider Display Name} {n}" label POST /accounts
+        # server-generated "{Provider Display Name} - {n}" label POST /accounts
         # already returned as a preview — never the bare account_id.
         auth_mode = "auto"
-        label = f"{PROVIDER_DISPLAY_NAMES.get(provider, provider)} {account_id}"
+        label = f"{PROVIDER_DISPLAY_NAMES.get(provider, provider)} - {account_id}"
         try:
             config, _ = load_config()
             accts = getattr(config.providers, provider, [])
@@ -519,7 +534,7 @@ def create_app() -> FastAPI:
             existing_ids = set()
 
         account_id = next_account_id(existing_ids)
-        label = f"{PROVIDER_DISPLAY_NAMES[body.provider]} {account_id}"
+        label = f"{PROVIDER_DISPLAY_NAMES[body.provider]} - {account_id}"
         # Return the reserved id; config is written only after credentials are confirmed.
         return {
             "provider": body.provider,
@@ -626,18 +641,35 @@ def create_app() -> FastAPI:
         return JSONResponse({"status": "ok", "message": "Restart service to retire MQTT sensors."})
 
     # -----------------------------------------------------------------------
-    # PATCH /accounts/{provider}/{account_id} — enable/disable
+    # PATCH /accounts/{provider}/{account_id} — enable/disable and/or alias
     # -----------------------------------------------------------------------
 
     @app.patch("/accounts/{provider}/{account_id}")
     async def patch_account(
         provider: str, account_id: str, request: Request
     ) -> JSONResponse:
-        """Enable or disable an account."""
+        """Enable/disable an account and/or set its (purely cosmetic) alias.
+
+        ``alias`` is a free-text nickname shown alongside the non-editable,
+        auto-generated ``label`` (e.g. "Claude - 1 (Work)"). It never affects
+        entity ids, unique ids, or MQTT topics. Send ``alias: ""`` to clear it.
+        """
         body = await request.json()
         enabled = body.get("enabled")
-        if enabled is None:
-            raise HTTPException(status_code=400, detail="Body must contain 'enabled' bool.")
+        alias = body.get("alias")
+        if enabled is None and alias is None:
+            raise HTTPException(
+                status_code=400, detail="Body must contain 'enabled' bool and/or 'alias' str."
+            )
+        if alias is not None:
+            if not isinstance(alias, str):
+                raise HTTPException(status_code=400, detail="'alias' must be a string.")
+            alias = alias.strip()
+            if len(alias) > _MAX_ALIAS_LEN:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"'alias' must be at most {_MAX_ALIAS_LEN} characters.",
+                )
 
         cfg_path = config_path()
         if not cfg_path.exists():
@@ -648,13 +680,21 @@ def create_app() -> FastAPI:
         changed = False
         for acct in accounts:
             if isinstance(acct, dict) and acct.get("id") == account_id:
-                acct["enabled"] = bool(enabled)
+                if enabled is not None:
+                    acct["enabled"] = bool(enabled)
+                if alias is not None:
+                    acct["alias"] = alias
                 changed = True
         if not changed:
             raise HTTPException(status_code=404, detail=f"Account {account_id} not found.")
         raw["providers"][provider] = accounts
         cfg_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
-        return JSONResponse({"status": "ok", "enabled": bool(enabled)})
+        response: dict[str, Any] = {"status": "ok"}
+        if enabled is not None:
+            response["enabled"] = bool(enabled)
+        if alias is not None:
+            response["alias"] = alias
+        return JSONResponse(response)
 
     # -----------------------------------------------------------------------
     # POST /accounts/{provider}/{account_id}/switch-oauth
@@ -682,9 +722,9 @@ def create_app() -> FastAPI:
         oauth_mode = "subscription" if provider == "codex" else "oauth"
 
         # Look up current label (preserve it); update auth_mode in config.
-        # Fall back to the generated "{Provider Display Name} {n}" label
+        # Fall back to the generated "{Provider Display Name} - {n}" label
         # (never the bare account_id) if the account somehow has none.
-        label = f"{PROVIDER_DISPLAY_NAMES.get(provider, provider)} {account_id}"
+        label = f"{PROVIDER_DISPLAY_NAMES.get(provider, provider)} - {account_id}"
         try:
             cfg, _ = load_config()
             accts = getattr(cfg.providers, provider, [])

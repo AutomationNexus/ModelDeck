@@ -163,6 +163,12 @@ body {
   text-overflow: ellipsis;
 }
 
+.account-alias {
+  font-weight: 400;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
 .account-meta {
   display: flex;
   align-items: center;
