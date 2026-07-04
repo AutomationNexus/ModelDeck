@@ -69,6 +69,7 @@ _PROVIDERS = ("codex", "claude", "cursor")
 # Used by /providers endpoint so the UI renders the right inputs per mode.
 _PROVIDER_META: dict[str, dict[str, Any]] = {
     "codex": {
+        "id": "codex",
         "name": PROVIDER_DISPLAY_NAMES["codex"],
         "oauth": True,
         # Default mode for the wizard — OAuth is recommended for independent sessions.
@@ -102,6 +103,7 @@ _PROVIDER_META: dict[str, dict[str, Any]] = {
         ],
     },
     "claude": {
+        "id": "claude",
         "name": PROVIDER_DISPLAY_NAMES["claude"],
         "oauth": True,
         # Default mode for the wizard — OAuth gives an independent session.
@@ -134,6 +136,7 @@ _PROVIDER_META: dict[str, dict[str, Any]] = {
         ],
     },
     "cursor": {
+        "id": "cursor",
         "name": PROVIDER_DISPLAY_NAMES["cursor"],
         "oauth": False,
         "default_mode": "personal",
@@ -365,13 +368,18 @@ def create_app() -> FastAPI:
         state = generate_state()
         url = build_authorize_url(spec, verifier, state)
 
-        label = account_id
+        # Default for a brand-new wizard account (not yet written to disk) is
+        # the same server-generated "{Provider Display Name} {n}" label that
+        # POST /accounts already returned as a preview — never the bare
+        # account_id. If the account already exists on disk (e.g. re-login),
+        # its stored label wins.
+        label = f"{PROVIDER_DISPLAY_NAMES.get(provider, provider)} {account_id}"
         try:
             config, _ = load_config()
             accounts = getattr(config.providers, provider, [])
             for acct in accounts:
                 if isinstance(acct, ProviderAccount) and acct.id == account_id:
-                    label = acct.label or account_id
+                    label = acct.label or label
                     break
         except Exception:
             pass
@@ -471,20 +479,25 @@ def create_app() -> FastAPI:
 
         write_account_secrets(provider, account_id, {body.field: body.value.strip()})
 
-        # Resolve auth_mode from existing config or default.
+        # Resolve auth_mode and label from existing config; default label for
+        # a brand-new wizard account (not yet on disk) is the same
+        # server-generated "{Provider Display Name} {n}" label POST /accounts
+        # already returned as a preview — never the bare account_id.
         auth_mode = "auto"
+        label = f"{PROVIDER_DISPLAY_NAMES.get(provider, provider)} {account_id}"
         try:
             config, _ = load_config()
             accts = getattr(config.providers, provider, [])
             for a in accts:
                 if isinstance(a, ProviderAccount) and a.id == account_id:
                     auth_mode = a.auth_mode
+                    label = a.label or label
                     break
         except Exception:
             pass
 
-        # Upsert: create (with account_id as label) or enable existing account.
-        upsert_account_in_config(provider, account_id, account_id, auth_mode=auth_mode, enabled=True)
+        # Upsert: create (with the generated/preserved label) or enable existing account.
+        upsert_account_in_config(provider, account_id, label, auth_mode=auth_mode, enabled=True)
         return JSONResponse({"status": "ok"})
 
     # -----------------------------------------------------------------------
@@ -669,13 +682,15 @@ def create_app() -> FastAPI:
         oauth_mode = "subscription" if provider == "codex" else "oauth"
 
         # Look up current label (preserve it); update auth_mode in config.
-        label = account_id
+        # Fall back to the generated "{Provider Display Name} {n}" label
+        # (never the bare account_id) if the account somehow has none.
+        label = f"{PROVIDER_DISPLAY_NAMES.get(provider, provider)} {account_id}"
         try:
             cfg, _ = load_config()
             accts = getattr(cfg.providers, provider, [])
             for a in accts:
                 if isinstance(a, ProviderAccount) and a.id == account_id:
-                    label = a.label or account_id
+                    label = a.label or label
                     break
         except Exception:
             pass

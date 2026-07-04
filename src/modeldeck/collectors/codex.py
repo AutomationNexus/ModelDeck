@@ -16,7 +16,7 @@ class CodexCollector:
     """Collect OpenAI/Codex quota via subscription or API key."""
 
     provider_id = "codex"
-    display_name = "OpenAI Codex"
+    display_name = "OpenAI"
 
     def __init__(
         self,

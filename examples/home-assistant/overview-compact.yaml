@@ -4,7 +4,7 @@
 # Optional: card-mod (HACS) for red auth_error styling on the status row below
 #
 # Gauges:
-#   Codex / Claude — primary window (subscription % or 5h) + 7-day weekly %
+#   OpenAI / Claude — primary window (subscription % or 5h) + 7-day weekly %
 #   Cursor — no weekly sensor; shows billing-cycle total + Auto pool (add API row in tab view)
 #
 # Status row (optional): collector health (ok / auth_error / …), not usage %. Remove the
@@ -20,7 +20,7 @@ cards:
         cards:
           - type: gauge
             entity: sensor.modeldeck_codex_default_usage_percent
-            name: Codex
+            name: OpenAI
             min: 0
             max: 100
             needle: true
@@ -30,7 +30,7 @@ cards:
               red: 90
           - type: gauge
             entity: sensor.modeldeck_codex_default_usage_weekly_percent
-            name: Codex Weekly
+            name: OpenAI Weekly
             min: 0
             max: 100
             needle: true
@@ -93,7 +93,7 @@ cards:
           }
     entities:
       - entity: sensor.modeldeck_codex_default_status
-        name: Codex
+        name: OpenAI
       - entity: sensor.modeldeck_claude_default_status
         name: Claude
       - entity: sensor.modeldeck_cursor_default_status

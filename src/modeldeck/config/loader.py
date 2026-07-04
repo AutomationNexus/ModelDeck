@@ -164,7 +164,7 @@ def slugify(label: str, existing: set[str] | None = None) -> str:
 # account label ("{Provider Display Name} {n}"). Single source of truth
 # shared by the web UI (POST /accounts) and the CLI (login/accounts add).
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
-    "codex": "OpenAI Codex",
+    "codex": "OpenAI",
     "claude": "Claude",
     "cursor": "Cursor",
 }

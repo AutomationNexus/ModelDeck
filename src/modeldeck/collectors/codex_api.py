@@ -35,7 +35,7 @@ def parse_codex_admin_costs(
     used = _sum_cost_usd(payload)
     return ProviderSnapshot(
         provider_id=provider_id,
-        display_name="OpenAI Codex",
+        display_name="OpenAI",
         collected_at=now,
         status=CollectorStatus.OK,
         usage_percent=None,
@@ -65,7 +65,7 @@ def parse_codex_billing_usage(
         reset_at = datetime.fromisoformat(reset_raw.replace("Z", "+00:00"))
     return ProviderSnapshot(
         provider_id=provider_id,
-        display_name="OpenAI Codex",
+        display_name="OpenAI",
         collected_at=now,
         status=CollectorStatus.OK,
         usage_percent=percent,

@@ -107,6 +107,16 @@ owner of those two files (event 1 writes them), and a plain merge would otherwis
 them back to `dev`'s stale copy on every promote. Do not remove `exclude-paths` without
 re-solving this.
 
+**GitHub Actions gotcha (bit us live, 2026-07-03):** this repo's default branch is `main`
+(required for HA's add-on discovery — see above), and `schedule:` triggers on *any* workflow
+always evaluate using the workflow file version on the **default branch**, never `dev`'s
+copy — regardless of which branch the schedule conceptually applies to. A `nightly.yml`
+cron-removal fix merged to `dev` alone did **not** take effect until promoted to `main`; the
+old 02:00 UTC cron kept firing silently in between. Any future change to a `schedule:` block
+in this repo needs an explicit promote to `main` before it's actually live — merging to `dev`
+is not enough. (This is also why `nightly.yml` has no `schedule:` trigger at all anymore —
+event-driven on `dev` push only, which sidesteps the whole class of bug.)
+
 ## Branch Policy
 
 See `docs/runbooks/branch-policy.md`. Summary:

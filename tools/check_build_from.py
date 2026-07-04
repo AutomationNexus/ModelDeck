@@ -14,7 +14,12 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUILD_FROM_RE = re.compile(r"^ARG\s+BUILD_FROM=(.+)$", re.MULTILINE)
 STABLE_VERSION_RE = re.compile(r"^(\d+\.\d+\.\d+)$")
-NIGHTLY_VERSION_RE = re.compile(r"^(\d+\.\d+\.\d+)-nightly\.\d{8}(?:\.\d+)?$")
+# Accepts every nightly version shape ever published — bare (legacy), dot-counter
+# (legacy), and merged 2+-digit counter (current). See the matching regex and its
+# long comment in tools/bump_haos_version.py for why the merged (dot-free) shape
+# is what bump_haos_version.py now always generates: it's the only shape HA
+# Supervisor's awesomeversion-based Update button can reliably compare as newer.
+NIGHTLY_VERSION_RE = re.compile(r"^(\d+\.\d+\.\d+)-nightly\.\d{8}(?:\.\d+|\d{2,})?$")
 SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
 # Sentinel value used as fallback in the release workflow when GH_TOKEN is
@@ -101,10 +106,10 @@ def check_addon_build_from(addon_dir: Path) -> list[str]:
             )
         if not NIGHTLY_VERSION_RE.match(version):
             errors.append(
-                f"{folder} nightly version must match X.Y.Z-nightly.YYYYMMDD[.n] "
-                f"(bump_haos_version.py now always generates .N going forward; bare "
-                f"YYYYMMDD without a counter is only accepted here for legacy pointers), "
-                f"got {version!r}"
+                f"{folder} nightly version must match X.Y.Z-nightly.YYYYMMDDNN "
+                f"(bump_haos_version.py now always generates a dot-free merged counter; "
+                f"bare YYYYMMDD and legacy YYYYMMDD.N are only accepted here for old "
+                f"already-published pointers), got {version!r}"
             )
     else:
         stable_match = STABLE_VERSION_RE.match(version)

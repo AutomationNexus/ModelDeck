@@ -406,7 +406,7 @@ class TestProvidersNewFields:
     def test_codex_default_mode_is_subscription(self, monkeypatch, tmp_path):
         client = _make_webui_client(monkeypatch, tmp_path)
         data = client.get("/providers").json()
-        codex = next(p for p in data["providers"] if p["name"] == "OpenAI Codex")
+        codex = next(p for p in data["providers"] if p["name"] == "OpenAI")
         assert codex["default_mode"] == "subscription"
 
     def test_claude_default_mode_is_oauth(self, monkeypatch, tmp_path):
@@ -425,6 +425,6 @@ class TestProvidersNewFields:
     def test_codex_has_paste_back_note(self, monkeypatch, tmp_path):
         client = _make_webui_client(monkeypatch, tmp_path)
         data = client.get("/providers").json()
-        codex = next(p for p in data["providers"] if p["name"] == "OpenAI Codex")
+        codex = next(p for p in data["providers"] if p["name"] == "OpenAI")
         assert "oauth_paste_back_note" in codex
         assert "localhost:1455" in codex["oauth_paste_back_note"]

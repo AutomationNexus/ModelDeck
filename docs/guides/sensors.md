@@ -25,7 +25,7 @@ Replace `{provider}` with `codex`, `claude`, or `cursor`.
 
 ## Provider × auth mode matrix
 
-### OpenAI Codex
+### OpenAI
 
 | Sensor | `subscription` | `api` |
 |--------|:------------:|:-----:|
@@ -89,7 +89,7 @@ The `{account}` segment is the account id. The static add-on options use `defaul
 Extra accounts added via the web UI or CLI (`modeldeck login` / `modeldeck accounts add`)
 are **always auto-numbered** — account names are not user-customizable. The first
 account added for a provider gets id `1` and display label `"{Provider Display Name} 1"`
-(e.g. `"Claude 1"`, `"OpenAI Codex 1"`, `"Cursor 1"`); the second gets `2` and
+(e.g. `"Claude 1"`, `"OpenAI 1"`, `"Cursor 1"`); the second gets `2` and
 `"{Provider Display Name} 2"`; and so on, per provider. Ids are always plain integers,
 so the account id can never re-embed the provider name and can never double up with
 the `modeldeck_{provider}_` entity id prefix (e.g. the old

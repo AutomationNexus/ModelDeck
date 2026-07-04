@@ -34,6 +34,10 @@ dev = [
   "ruff>=0.6",
   "pip-audit>=2.7",
   "pre-commit>=4.0",
+  # Pinned to the same version Home Assistant Supervisor/Core ship, so the
+  # nightly-version regression tests in tests/tools/ exercise the real
+  # comparator HA's add-on Update button relies on.
+  "awesomeversion==25.8.0",
 ]
 
 [project.scripts]
