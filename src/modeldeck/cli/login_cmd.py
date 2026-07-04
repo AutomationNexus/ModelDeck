@@ -138,7 +138,7 @@ def _ensure_account_in_config(
 def cmd_login(args: argparse.Namespace) -> int:
     """Run the OAuth login wizard for a provider.
 
-    Account labels are always auto-generated ("{Provider Display Name} {n}")
+    Account labels are always auto-generated ("{Provider Display Name} - {n}")
     and are not user-customizable — there is no --label flag.
     """
     provider = args.provider
@@ -152,7 +152,7 @@ def cmd_login(args: argparse.Namespace) -> int:
         existing_ids = set()
 
     account_id = next_account_id(existing_ids)
-    label = f"{PROVIDER_DISPLAY_NAMES[provider]} {account_id}"
+    label = f"{PROVIDER_DISPLAY_NAMES[provider]} - {account_id}"
 
     if provider in _PASTE_ONLY_PROVIDERS:
         print("\nCursor does not support an OAuth login wizard.")
@@ -193,7 +193,7 @@ def cmd_accounts_list(args: argparse.Namespace) -> int:
 def cmd_accounts_add(args: argparse.Namespace) -> int:
     """Add a new account (paste-token path for Cursor and api-key modes).
 
-    Account labels are always auto-generated ("{Provider Display Name} {n}")
+    Account labels are always auto-generated ("{Provider Display Name} - {n}")
     and are not user-customizable — there is no --label flag.
     """
     provider = args.provider
@@ -208,7 +208,7 @@ def cmd_accounts_add(args: argparse.Namespace) -> int:
         existing_ids = set()
 
     account_id = next_account_id(existing_ids)
-    label = f"{PROVIDER_DISPLAY_NAMES[provider]} {account_id}"
+    label = f"{PROVIDER_DISPLAY_NAMES[provider]} - {account_id}"
 
     if token:
         # Cursor personal or api-key paste

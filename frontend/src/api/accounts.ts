@@ -22,7 +22,7 @@ export async function reserveAccount(
   provider: string,
   auth_mode: string,
 ): Promise<Account> {
-  // Labels are always server-generated ("{Provider Display Name} {n}") and
+  // Labels are always server-generated ("{Provider Display Name} - {n}") and
   // are not user-customizable — there is no label parameter here by design.
   return api.post<Account>("accounts", { provider, auth_mode });
 }
@@ -75,6 +75,15 @@ export async function toggleAccount(
   enabled: boolean,
 ): Promise<{ status: string }> {
   return api.patch(`accounts/${provider}/${accountId}`, { enabled });
+}
+
+/** Set (or clear, with an empty string) an account's cosmetic alias. */
+export async function updateAccountAlias(
+  provider: string,
+  accountId: string,
+  alias: string,
+): Promise<{ status: string; alias?: string }> {
+  return api.patch(`accounts/${provider}/${accountId}`, { alias });
 }
 
 export async function deleteAccount(

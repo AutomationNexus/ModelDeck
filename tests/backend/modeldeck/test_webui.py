@@ -185,7 +185,7 @@ def test_create_account_returns_account_id_and_provider(monkeypatch):
 
 
 def test_create_account_label_is_always_auto_generated(monkeypatch):
-    """Account labels are always server-generated ("{Provider} {n}") and
+    """Account labels are always server-generated ("{Provider} - {n}") and
     never customizable — even if a client sends a "label" field in the
     request body, it has no effect (there is no such field on the model).
 
@@ -210,7 +210,7 @@ def test_create_account_label_is_always_auto_generated(monkeypatch):
         )
     data = resp.json()
     assert data["id"] == "1"
-    assert data["label"] == "Claude 1"
+    assert data["label"] == "Claude - 1"
     assert not data["id"].startswith("claude")
 
 
@@ -231,7 +231,7 @@ def test_create_account_auto_numbers_per_provider(monkeypatch):
             json={"provider": "codex", "auth_mode": "api"},
         )
     data = resp.json()
-    assert data["label"] == "OpenAI 1"
+    assert data["label"] == "OpenAI - 1"
     assert data["id"] == "1"
 
 
@@ -240,7 +240,7 @@ def test_create_account_auto_numbers_increment_with_existing_accounts(monkeypatc
     both entity ids stay distinct."""
     cfg = _make_minimal_config(
         claude_accounts=[
-            {"id": "1", "label": "Claude 1", "enabled": True, "auth_mode": "oauth"}
+            {"id": "1", "label": "Claude - 1", "enabled": True, "auth_mode": "oauth"}
         ]
     )
     secrets = _empty_secrets()
@@ -256,7 +256,7 @@ def test_create_account_auto_numbers_increment_with_existing_accounts(monkeypatc
             json={"provider": "claude", "auth_mode": "oauth"},
         )
     data = resp.json()
-    assert data["label"] == "Claude 2"
+    assert data["label"] == "Claude - 2"
     assert data["id"] == "2"
 
 

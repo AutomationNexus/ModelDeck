@@ -88,15 +88,18 @@ For full parity with Codex-style sensors (plan + 5h reset more often), use **coo
 The `{account}` segment is the account id. The static add-on options use `default`.
 Extra accounts added via the web UI or CLI (`modeldeck login` / `modeldeck accounts add`)
 are **always auto-numbered** — account names are not user-customizable. The first
-account added for a provider gets id `1` and display label `"{Provider Display Name} 1"`
-(e.g. `"Claude 1"`, `"OpenAI 1"`, `"Cursor 1"`); the second gets `2` and
-`"{Provider Display Name} 2"`; and so on, per provider. Ids are always plain integers,
+account added for a provider gets id `1` and display label `"{Provider Display Name} - 1"`
+(e.g. `"Claude - 1"`, `"OpenAI - 1"`, `"Cursor - 1"`); the second gets `2` and
+`"{Provider Display Name} - 2"`; and so on, per provider. Ids are always plain integers,
 so the account id can never re-embed the provider name and can never double up with
 the `modeldeck_{provider}_` entity id prefix (e.g. the old
 `sensor.modeldeck_claude_claude_1_...` bug class is impossible by construction).
 
 There is no way to rename an account or customize its label after creation — this
-keeps entity ids fully predictable and collision-free. If you want a different
+keeps entity ids fully predictable and collision-free. You can, however, set an
+optional cosmetic **alias** from the web UI (e.g. `"Claude - 1 (Work)"`) to help tell
+accounts apart; it's shown next to the label and in the HA device name, but — like the
+label — never affects entity ids. If you want a different
 account layout, delete the account and add a new one.
 
 Each device's Home Assistant "suggested area" is set to **ModelDeck**, so all

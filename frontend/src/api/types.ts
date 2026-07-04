@@ -2,6 +2,8 @@ export interface Account {
   provider: string;
   id: string;
   label: string;
+  /** User-editable, purely cosmetic nickname shown next to the label. */
+  alias?: string;
   enabled: boolean;
   auth_mode: string;
 }

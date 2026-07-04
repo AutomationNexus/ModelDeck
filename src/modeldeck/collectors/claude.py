@@ -34,6 +34,7 @@ class ClaudeCollector:
             self._account = account
             self._account_id = account.id
             self._account_label = account.label
+            self._account_alias = account.alias
         elif isinstance(account, ProviderToggle):
             self._account = ProviderAccount(
                 id=account_id,
@@ -44,10 +45,12 @@ class ClaudeCollector:
             )
             self._account_id = account_id
             self._account_label = account.account_label or ""
+            self._account_alias = ""
         else:
             self._account = ProviderAccount(id=account_id)
             self._account_id = account_id
             self._account_label = ""
+            self._account_alias = ""
         self._secrets = resolve_claude_secrets(self._account, secrets)
         self._client = client
 
@@ -68,6 +71,7 @@ class ClaudeCollector:
         snapshot = await collector.collect(self.provider_id)
         snapshot.account_id = self._account_id
         snapshot.account_label = self._account_label
+        snapshot.account_alias = self._account_alias
         return snapshot
 
     def _display_name(self) -> str:

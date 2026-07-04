@@ -27,7 +27,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 export function AddAccountWizard({ providers, accounts, onDone, onCancel, onError }: Props) {
-  // Preview of the label the server will generate: "{Provider} {n}", where
+  // Preview of the label the server will generate: "{Provider} - {n}", where
   // n is 1-indexed based on how many accounts already exist for that
   // provider. This is not user-editable — labels are always
   // server-generated (POST /accounts takes no label) so the account id is
@@ -37,7 +37,7 @@ export function AddAccountWizard({ providers, accounts, onDone, onCancel, onErro
   // estimate for display only; the server response is authoritative.
   function previewLabelFor(p: string): string {
     const count = accounts.filter((a) => a.provider === p).length;
-    return `${PROVIDER_LABELS[p]} ${count + 1}`;
+    return `${PROVIDER_LABELS[p]} - ${count + 1}`;
   }
 
   const [step, setStep] = useState<Step>("provider");
