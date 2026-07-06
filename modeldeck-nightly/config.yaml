@@ -1,5 +1,5 @@
 name: ModelDeck (Nightly)
-version: "0.0.8-nightly.2026070601"
+version: "0.0.8-nightly.2026070602"
 slug: modeldeck-nightly
 description: Nightly ModelDeck bridge for Home Assistant (Codex, Claude, Cursor)
 url: https://github.com/automationnexus/ModelDeck
