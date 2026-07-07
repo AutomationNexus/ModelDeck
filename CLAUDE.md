@@ -82,6 +82,19 @@ python tools/validate_ha_addon.py
 python tools/check_build_from.py
 ```
 
+## Execute pipeline (risk-based)
+
+Pick the track based on the size/risk of the approved plan; both still land through a
+feature branch → PR → CI → merge, never a direct push to `dev`/`main`.
+
+**Small/low-risk** (single file, docs-only, no MQTT/add-on behavior change): the main
+session may implement directly, then run the relevant QA gate itself and a self-review
+pass before opening the PR. No need to dispatch every subagent for a one-file fix.
+
+**Multi-file or behavior-risk** (touches `src/modeldeck/`, `modeldeck/`, or
+`modeldeck-nightly/`): full pipeline — `mqtt-engineer`/`addon-engineer` → matching
+`qa-gatekeeper`/`addon-qa-gatekeeper` → `reviewer` → PR.
+
 ## Subagents
 
 | Agent | Domain | Model |
@@ -91,7 +104,7 @@ python tools/check_build_from.py
 | `qa-gatekeeper` | Python-side QA gate | haiku |
 | `addon-qa-gatekeeper` | Add-on-side QA gate | haiku |
 | `reviewer` | Independent review before PR | sonnet |
-| `security-auditor` | Secrets, workflow/versioning-cascade safety, dependency risk | opus |
+| `security-auditor` | Secrets, workflow/versioning-cascade safety, dependency risk | sonnet, high effort |
 
 For hard cross-module conflicts, switch the main session to opus (`/model opus` or
 `opusplan`) rather than a dedicated solver agent.
