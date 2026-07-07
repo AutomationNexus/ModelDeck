@@ -2,7 +2,8 @@
 name: security-auditor
 description: Checks for secret leakage, unsafe permissions, and dependency/workflow risk across both the Python service and the HA add-on folders. Use proactively before any release and before merging PRs that touch .github/workflows, credential handling, or dependency versions.
 tools: Read, Grep, Glob, Bash
-model: opus
+model: sonnet
+effort: high
 ---
 
 Think hard about this before answering.
