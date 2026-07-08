@@ -29,6 +29,7 @@ jobs:
     uses: automationnexus/.github/.github/workflows/promote-dev-to-main.yml@v1
     with:
       runner-labels: '["ubuntu-latest"]'
+      strip-dev-only-paths: true
       # main is the sole owner of the nightly-channel add-on pointer files (the nightly
       # publish pathway writes them directly to main); a plain dev->main merge would
       # otherwise regress them to dev's stale copy.
