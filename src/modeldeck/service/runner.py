@@ -6,9 +6,14 @@ import asyncio
 import signal
 
 from modeldeck.collectors.base import build_collectors
-from modeldeck.config.loader import check_secrets_permissions, load_config
+from modeldeck.config.loader import (
+    check_secrets_permissions,
+    load_config,
+    migrate_legacy_account_labels,
+)
 from modeldeck.core.exceptions import MqttError
 from modeldeck.core.logging import get_logger, setup_logging
+from modeldeck.core.paths import config_path
 from modeldeck.mqtt.client import MqttBridge
 from modeldeck.service.reload import ConfigWatcher, _active_keys
 from modeldeck.service.scheduler import CollectionRunner
@@ -33,6 +38,15 @@ async def _supervise_poll_task(
 
 async def run_service() -> None:
     """Start the ModelDeck service."""
+    # One-time, idempotent migration of any legacy "{Provider} {n}" labels
+    # (no dash) still on disk to the current "{Provider} - {n}" format.
+    # Never raises — a migration failure must not prevent the service from
+    # starting.
+    try:
+        migrate_legacy_account_labels(config_path())
+    except Exception:
+        logger.exception("Legacy account label migration failed; continuing without it.")
+
     config, secrets = load_config()
     setup_logging(config.service.log_level)
     for warning in check_secrets_permissions():

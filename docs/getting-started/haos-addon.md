@@ -130,7 +130,8 @@ Example: `sensor.modeldeck_claude_default_usage_percent`
 
 The `default` account comes from the static options. Additional accounts added via the web
 UI or CLI are auto-numbered (`1`, `2`, ...) with a matching auto-generated display label
-(e.g. `"Claude 1"`) — account names aren't user-customizable.
+(e.g. `"Claude - 1"`) — account names aren't user-customizable, though you can add an
+optional cosmetic alias (e.g. `"Claude - 1 (Work)"`) from the web UI.
 
 **If you are upgrading from a previous version:** old `sensor.modeldeck_{provider}_{metric}`
 entities will be retired automatically on first start. Update your dashboards.

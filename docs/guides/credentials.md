@@ -6,16 +6,18 @@ ModelDeck supports **multiple accounts per provider**. Each account gets its own
 and sensors (e.g. `sensor.modeldeck_claude_1_usage_percent`).
 
 Account names are **always auto-numbered** — there is no way to set a custom label. The first
-account added for a provider is `"{Provider Display Name} 1"` (e.g. `"Claude 1"`), the second
-`"{Provider Display Name} 2"`, and so on. This keeps entity ids fully predictable and
-collision-free; there is no rename feature.
+account added for a provider is `"{Provider Display Name} - 1"` (e.g. `"Claude - 1"`), the second
+`"{Provider Display Name} - 2"`, and so on. This keeps entity ids fully predictable and
+collision-free; there is no rename feature. You can optionally set a cosmetic **alias**
+(e.g. `"Claude - 1 (Work)"`) from the web UI to help tell accounts apart — this never
+affects entity ids either.
 
 ### HAOS: add accounts via the Ingress web UI
 
 Open **Settings → Add-ons → ModelDeck → Open Web UI** (port 8099).
 
 1. Click **Add Account**.
-2. Choose a provider (the account name, e.g. "Claude 1", is generated automatically).
+2. Choose a provider (the account name, e.g. "Claude - 1", is generated automatically).
 3. **Claude / Codex:** click the authorize URL → log in → paste back the code. ModelDeck
    exchanges the code for tokens and saves them.
 4. **Cursor:** paste your JWT (`eyJ...`) or session cookie.
@@ -28,7 +30,7 @@ Codex CLI on your PC does not affect accounts added via the web UI.**
 
 ```bash
 modeldeck login --provider claude
-# Account name is auto-generated (e.g. "Claude 1"). Prints authorize URL;
+# Account name is auto-generated (e.g. "Claude - 1"). Prints authorize URL;
 # paste back code when prompted.
 
 modeldeck login --provider codex

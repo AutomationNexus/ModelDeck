@@ -10,6 +10,7 @@ import {
   pasteToken,
   switchToOAuth,
   fetchAccountEntities,
+  updateAccountAlias,
 } from "../api/accounts";
 import { ApiError } from "../api/client";
 import { ProviderIcon } from "./ProviderIcon";
@@ -23,13 +24,20 @@ interface Props {
   onError: (msg: string) => void;
 }
 
-type Modal = "none" | "delete" | "paste" | "oauth" | "entities";
+type Modal = "none" | "delete" | "paste" | "oauth" | "entities" | "alias";
+
+const MAX_ALIAS_LEN = 40;
 
 export function AccountCard({ account, providers, onRefresh, onSuccess, onError }: Props) {
-  const { provider, id, label, enabled, auth_mode } = account;
+  const { provider, id, label, alias, enabled, auth_mode } = account;
   const [verifyStatus, setVerifyStatus] = useState<string | null>(null);
   const [verifying, setBusy] = useState(false);
   const [modal, setModal] = useState<Modal>("none");
+
+  // Edit-alias modal state
+  const [aliasValue, setAliasValue] = useState(alias ?? "");
+  const [aliasBusy, setAliasBusy] = useState(false);
+  const [aliasErr, setAliasErr] = useState("");
 
   // OAuth re-login state
   const [oauthUrl, setOauthUrl] = useState("");
@@ -192,13 +200,42 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
     navigator.clipboard.writeText(text).catch(() => {/* ignore */});
   }
 
+  function handleOpenAliasModal() {
+    setAliasValue(alias ?? "");
+    setAliasErr("");
+    setModal("alias");
+  }
+
+  async function handleSaveAlias() {
+    const trimmed = aliasValue.trim();
+    if (trimmed.length > MAX_ALIAS_LEN) {
+      setAliasErr(`Alias must be at most ${MAX_ALIAS_LEN} characters.`);
+      return;
+    }
+    setAliasBusy(true);
+    setAliasErr("");
+    try {
+      await updateAccountAlias(provider, id, trimmed);
+      setModal("none");
+      onSuccess(trimmed ? "Alias saved." : "Alias cleared.");
+      onRefresh();
+    } catch (e) {
+      setAliasErr(e instanceof ApiError ? e.detail : String(e));
+    } finally {
+      setAliasBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="card account-card">
         <div className="account-card-top">
           <ProviderIcon provider={provider} />
           <div className="account-info">
-            <div className="account-label">{label || id}</div>
+            <div className="account-label">
+              {label || id}
+              {alias && <span className="account-alias"> ({alias})</span>}
+            </div>
             <div className="account-meta">
               <span className="badge badge-mode mono">{auth_mode}</span>
               <span className={`badge ${enabled ? "badge-enabled" : "badge-disabled"}`}>
@@ -243,6 +280,13 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
           <button className="btn btn-secondary" disabled={verifying} onClick={handleVerify}>
             {verifying ? "Checking…" : "Verify"}
           </button>
+          <button
+            className="btn btn-secondary"
+            onClick={handleOpenAliasModal}
+            title="Set a nickname to help tell accounts apart — cosmetic only, never affects entity ids"
+          >
+            {alias ? "Edit alias" : "Add alias"}
+          </button>
           {/* Switch to OAuth: shown for non-OAuth Claude/Codex accounts */}
           {canSwitchToOAuth && (
             <button
@@ -286,6 +330,44 @@ export function AccountCard({ account, providers, onRefresh, onSuccess, onError 
           onConfirm={handleDelete}
           onCancel={() => setModal("none")}
         />
+      )}
+
+      {/* Edit alias modal */}
+      {modal === "alias" && (
+        <div className="overlay" onClick={() => setModal("none")}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Alias — {label || id}</span>
+              <button className="btn btn-ghost btn-icon" onClick={() => setModal("none")}>×</button>
+            </div>
+            <div className="modal-body">
+              <p className="text-muted" style={{ fontSize: "0.83rem" }}>
+                Optional nickname to help tell accounts apart, e.g. "Work" or "Personal".
+                Cosmetic only — shown next to the label, never affects entity ids.
+              </p>
+              <div className="form-group">
+                <label className="form-label">Alias</label>
+                <input
+                  type="text"
+                  value={aliasValue}
+                  placeholder="e.g. Work"
+                  maxLength={MAX_ALIAS_LEN}
+                  onChange={(e) => setAliasValue(e.target.value)}
+                  autoComplete="off"
+                  autoFocus
+                />
+                <span className="form-hint">{aliasValue.trim().length}/{MAX_ALIAS_LEN}</span>
+              </div>
+              {aliasErr && <p className="text-danger" style={{ fontSize: "0.82rem" }}>{aliasErr}</p>}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModal("none")}>Cancel</button>
+              <button className="btn btn-primary" disabled={aliasBusy} onClick={handleSaveAlias}>
+                {aliasBusy ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Paste credentials modal */}

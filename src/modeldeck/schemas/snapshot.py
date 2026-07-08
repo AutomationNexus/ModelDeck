@@ -48,6 +48,7 @@ class ProviderSnapshot:
     status: CollectorStatus
     account_id: str = "default"
     account_label: str = ""
+    account_alias: str = ""
     usage_percent: float | None = None
     usage_used: float | None = None
     usage_limit: float | None = None
