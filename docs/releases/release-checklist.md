@@ -10,9 +10,13 @@ Use this before the first (or any) `dev` → `main` release PR.
 - [ ] `ops/run-tests.ps1` passes locally (97%+ coverage)
 - [ ] `modeldeck config validate` on example configs
 - [ ] CHANGELOG updated for the release
-- [ ] **Version bumped** in `pyproject.toml` to the intended release (e.g. `0.0.1`, `0.0.2`, …)
+- [ ] **Version bump type decided**: dispatch **Promote dev to main** with the `bump-type`
+      input set to `patch` (default), `minor`, or `major` — never hand-edit `pyproject.toml`'s
+      version. The promote workflow computes the new `X.Y.Z` from the latest `vX.Y.Z` tag
+      reachable on `main` and writes it to `pyproject.toml` on the promote branch.
 
-`release.yml` tags **`v{project.version}`** from `pyproject.toml` on merge to `main`. It does **not** auto-increment from the previous git tag.
+`release.yml` tags **`v{project.version}`** from `pyproject.toml` on merge to `main` — it just
+reads whatever version the promote step already wrote; it does not itself compute a bump.
 
 ## Post-merge
 
