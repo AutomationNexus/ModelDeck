@@ -52,6 +52,19 @@ discovery), and `schedule:` triggers on *any* workflow always evaluate using the
 file version on the **default branch**, never `dev`'s copy. Any future change to a
 `schedule:` block needs an explicit promote to `main` before it's actually live.
 
+### App version bump (`bump-type`)
+
+The **parent release version** in the table above (row 1 — what
+`modeldeck/config.yaml` mirrors) is the `pyproject.toml` version on `main`,
+computed by the generic `bump-type` input on `promote-dev-to-main.yml`
+(`patch` default / `minor` / `major` → next `X.Y.Z` off the latest `vX.Y.Z`
+tag on `main`). This only applies to event 2 above (a real manual-dispatch
+release) — never hand-edit `pyproject.toml`'s version. The `push`-triggered
+add-on-only auto-promote paths (events 3 and 4) always pass `bump-type: none`
+and must keep doing so; they're content-only syncs that must never touch the
+app version. See `docs/releases/release-checklist.md` for the release
+dispatch steps.
+
 ## Branch policy
 
 See `docs/runbooks/branch-policy.md`. Summary: `dev` is workbench, `main` is stable and is
@@ -59,6 +72,9 @@ also what the HA add-on store reads from. No direct pushes (GitHub rulesets + CI
 `.githooks/pre-push`). Feature branch → PR → CI green → merge → delete branch. Promote
 `dev`→`main` only via **Promote dev to main** (or its automatic add-on triggers above).
 Enable hooks once per clone: `tools\install-githooks.cmd`.
+Org-wide CI/PR flow, branch rules, and auto-versioning: see `../CLAUDE.md` (the
+AutomationNexus GitHub workspace root) — consult it first for anything not
+covered here, or if CI/promote looks broken.
 
 ## Shell (Windows local dev)
 
