@@ -1,5 +1,143 @@
 # Changelog
 
+## [0.0.8-nightly.2026070903] - 2026-07-09
+
+Nightly image published from dev.
+
+- Parent SHA: `039a61ba887b`
+
+## [0.0.8-nightly.2026070902] - 2026-07-09
+
+Nightly image published from dev.
+
+- Parent SHA: `efa1ee7d6719`
+
+## [0.0.8-nightly.2026070901] - 2026-07-09
+
+Nightly image published from dev.
+
+- Parent SHA: `3a4e4292c06c`
+
+## [0.0.8-nightly.2026070801] - 2026-07-08
+
+Nightly image published from dev.
+
+- Parent SHA: `f603bd0861f8`
+
+## [0.0.8-nightly.2026070701] - 2026-07-07
+
+Nightly image published from dev.
+
+- Parent SHA: `55a1f4ad0a50`
+
+## [0.0.8-nightly.2026070602] - 2026-07-06
+
+Nightly image published from dev.
+
+- Parent SHA: `a02741eae09d`
+
+## [0.0.8-nightly.2026070601] - 2026-07-06
+
+Nightly image published from dev.
+
+- Parent SHA: `3cbe6c01f2ab`
+
+## [0.0.8-nightly.2026070402] - 2026-07-04
+
+Nightly image published from dev.
+
+- Parent SHA: `722871580607`
+
+## [0.0.8-nightly.2026070401] - 2026-07-04
+
+Nightly image published from dev.
+
+- Parent SHA: `77ec746d4cbc`
+
+## [0.0.8-nightly.20260703.3] - 2026-07-03
+
+Nightly image published from dev.
+
+- Parent SHA: `2889ed6c2475`
+
+## [0.0.8-nightly.20260703.2] - 2026-07-03
+
+Nightly image published from dev.
+
+- Parent SHA: `f3917a27e14d`
+
+## [0.0.8-nightly.20260703.1] - 2026-07-03
+
+Nightly image published from dev.
+
+- Parent SHA: `e0ba7a338ce6`
+
+## [0.0.8-nightly.20260703] - 2026-07-03
+
+Nightly image published from dev.
+
+- Parent SHA: `4e84cc5e20b8`
+
+## [0.0.8-nightly.20260701.3] - 2026-07-01
+
+Nightly image published from dev.
+
+- Parent SHA: `0da0a1d19c35`
+
+## [0.0.8-nightly.20260701.2] - 2026-07-01
+
+Nightly image published from dev.
+
+- Parent SHA: `6c77c1a03bc7`
+
+## [0.0.8-nightly.20260701.1] - 2026-07-01
+
+Nightly image published from dev.
+
+- Parent SHA: `4c433200c086`
+
+## [0.0.8-nightly.20260701] - 2026-07-01
+
+Nightly image published from dev.
+
+- Parent SHA: `9c5bd54f40b7`
+
+## [0.0.7-nightly.20260701.6] - 2026-07-01
+
+Nightly image published from dev.
+
+- Parent SHA: `4a6af02fa3bd`
+
+## [0.0.7-nightly.20260701.5] - 2026-07-01
+
+Nightly image published from dev.
+
+- Parent SHA: `0fa397a1a46b`
+
+## [0.0.7-nightly.20260701.4] - 2026-07-01
+
+Nightly image published from dev.
+
+- Parent SHA: `4cec8b12d5d0`
+
+## [0.0.7-nightly.20260701.3] - 2026-07-01
+
+Nightly image published from dev.
+
+- Parent SHA: `b1bddd62a236`
+
+## [0.0.7-nightly.20260701.2] - 2026-07-01
+
+Nightly image published from dev.
+
+- Parent SHA: `2f80cf054ed7`
+
+## [0.0.7-nightly.20260701.1] - 2026-07-01
+
+Nightly image published from dev.
+
+- Parent SHA: `6b9d394f5f8d`
+
 ## [0.0.7-nightly.20260701] - 2026-07-01
 
 Automated nightly roll from parent dev build.
