@@ -2,6 +2,12 @@ name: Promote dev to main
 
 on:
   workflow_dispatch:
+    inputs:
+      bump-type:
+        description: Version bump to apply on promote
+        type: choice
+        options: [patch, minor, major]
+        default: patch
   # Fires automatically when a modeldeck/ change lands on dev — most commonly the
   # sync-addon-stable PR (part of release.yml) syncing the stable pin after a release.
   # There is no version-bump job here: stable add-on version is always exactly the
@@ -36,6 +42,10 @@ jobs:
       exclude-paths: |
         modeldeck-nightly/config.yaml
         modeldeck-nightly/CHANGELOG.md
+      # The push-triggered path above is an add-on-only auto-promote (see its comment) and
+      # must never bump the app version -- only a manual workflow_dispatch (a real release)
+      # gets a real bump-type value.
+      bump-type: ${{ github.event_name == 'workflow_dispatch' && inputs.bump-type || 'none' }}
     secrets:
       ci-bot-app-id: ${{ secrets.CI_BOT_APP_ID }}
       ci-bot-app-private-key: ${{ secrets.CI_BOT_APP_PRIVATE_KEY }}
