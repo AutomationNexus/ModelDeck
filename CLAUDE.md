@@ -113,6 +113,14 @@ pass before opening the PR. No need to dispatch every subagent for a one-file fi
 
 ## Subagents
 
+The four core roles (`architect`, `qa-gatekeeper`, `reviewer`, `security-auditor`) are
+the org-standard shared core, sourced from
+`automationnexus/.github/templates/_shared/.claude/` — each carries a
+`<!-- repo-specific -->` marker separating the shared skeleton body from ModelDeck's
+distilled facts below it. `mqtt-engineer` and `addon-engineer` are domain layers on top
+of that core, specific to this repo's two domains. See the workspace-root
+`CLAUDE.md`'s "Agent organization" section for the full org-wide model.
+
 | Agent | Domain | Model |
 |-------|--------|-------|
 | `mqtt-engineer` | `src/modeldeck/`, MQTT/provider polling | sonnet |
