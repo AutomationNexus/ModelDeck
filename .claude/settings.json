@@ -2,7 +2,13 @@
   "permissions": {
     "deny": [
       "Read(./.env)",
+      "Read(./.env.*)",
       "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/id_rsa*)",
+      "Read(**/id_ed25519*)",
       "Read(./config/secrets.yaml)",
       "Read(**/config/secrets.yaml)",
       "Read(./secrets.yaml)",

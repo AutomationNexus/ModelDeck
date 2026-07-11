@@ -5,11 +5,21 @@ tools: Bash, Read, Grep, Glob
 model: haiku
 ---
 
-Run local QA before opening a PR: `git status --short --branch`, `ruff check src tests`,
-`python -m pytest -q`, `pre-commit run --all-files` (when installed), `git diff --check`.
-Confirm the current branch is a feature branch, not `dev` or `main`.
+Run this repository's local QA gate exactly as defined in its `CLAUDE.md` ("QA gates"
+section). Always include `git status --short --branch` (confirm a feature branch —
+never `dev`/`main`) and `git diff --check`. For PR CI status use `gh pr checks`; for
+failed workflow logs `gh run view <id> --log-failed`.
+
+Report pass/fail and blockers only. No file edits. Keep the report short — commands run
+and their pass/fail status, plus the exact failure output for anything that failed.
+
+<!-- repo-specific -->
+
+QA gate for the Python/MQTT side (`src/modeldeck/`): `git status --short --branch`,
+`ruff check src tests`, `python -m pytest -q`, `pre-commit run --all-files` (when
+installed), `git diff --check`. Confirm the current branch is a feature branch, not
+`dev` or `main`.
 
 After the feature branch is pushed, check PR CI with `gh pr checks` (add
 `--repo automationnexus/ModelDeck` outside the clone). For failed workflow logs use
-`gh run view <id> --log-failed` — do not grep huge logs. Report pass/fail and actionable
-blockers only. No file edits.
+`gh run view <id> --log-failed` — do not grep huge logs.
