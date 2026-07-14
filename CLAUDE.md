@@ -108,8 +108,10 @@ session may implement directly, then run the relevant QA gate itself and a self-
 pass before opening the PR. No need to dispatch every subagent for a one-file fix.
 
 **Multi-file or behavior-risk** (touches `src/modeldeck/`, `modeldeck/`, or
-`modeldeck-nightly/`): full pipeline — `mqtt-engineer`/`addon-engineer` → matching
-`qa-gatekeeper`/`addon-qa-gatekeeper` → `reviewer` → PR.
+`modeldeck-nightly/`): run `architect` first when domain boundaries are unclear or the
+change spans both the Python service and an add-on channel — it plans the cross-domain
+contract before any engineer touches code. Then: `mqtt-engineer`/`addon-engineer` →
+matching `qa-gatekeeper`/`addon-qa-gatekeeper` → `reviewer` → PR.
 
 ## Subagents
 
@@ -123,6 +125,7 @@ of that core, specific to this repo's two domains. See the workspace-root
 
 | Agent | Domain | Model |
 |-------|--------|-------|
+| `architect` | Cross-domain boundaries, versioning-cascade release risk — before implementation | sonnet, high effort |
 | `mqtt-engineer` | `src/modeldeck/`, MQTT/provider polling | sonnet |
 | `addon-engineer` | `modeldeck/`, `modeldeck-nightly/` | sonnet |
 | `qa-gatekeeper` | Python-side QA gate | haiku |
