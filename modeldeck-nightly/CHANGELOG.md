@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.8-nightly.2026071402] - 2026-07-14
+
+Nightly image published from dev.
+
+- Parent SHA: `ad257acdb8f8`
+
 ## [0.0.8-nightly.2026071401] - 2026-07-14
 
 Nightly image published from dev.
