@@ -1,4 +1,4 @@
-ARG BUILD_FROM=ghcr.io/automationnexus/modeldeck:v0.0.10
+ARG BUILD_FROM=ghcr.io/automationnexus/modeldeck:v0.0.11
 FROM ${BUILD_FROM}
 
 USER root
