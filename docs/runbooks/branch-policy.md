@@ -31,6 +31,11 @@ gh pr create --base dev --title "Short title" --body "Summary and test plan"
 
 After CI is green on the PR, merge on GitHub (squash or merge commit). Delete the feature branch when prompted.
 
+Working a tracked issue: create the branch with `gh issue develop <n> --checkout --name
+fix/<slug>` instead of a plain `git checkout -b` — it links the branch to the issue
+(`Issue.linkedBranches`), which is what lets the org Delivery board auto-set Status to
+**In Progress**.
+
 ## Local hook setup (once per clone)
 
 ```cmd
