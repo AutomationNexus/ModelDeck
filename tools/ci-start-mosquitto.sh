@@ -20,10 +20,19 @@ allow_anonymous true
 EOF
 
 docker rm -f "${CONTAINER_NAME}" 2>/dev/null || true
-docker run -d --name "${CONTAINER_NAME}" \
+
+# Config goes in via `docker cp`, NOT a bind mount. A bind mount silently assumes the
+# Docker daemon can see the runner's own filesystem. That holds when the daemon runs on
+# the same host (GitHub-hosted runners), but not on the org's ARC pods, where the daemon
+# does not share the runner's /tmp: it finds no such source path, creates an empty
+# *directory* there, and the run dies with
+#   "not a directory: Are you trying to mount a directory onto a file (or vice-versa)?"
+# `docker cp` goes through the daemon API instead, so it works either way.
+docker create --name "${CONTAINER_NAME}" \
   -p "127.0.0.1:${PORT}:1883" \
-  -v "${CONFIG_DIR}/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro" \
-  eclipse-mosquitto:2
+  eclipse-mosquitto:2 >/dev/null
+docker cp "${CONFIG_DIR}/mosquitto.conf" "${CONTAINER_NAME}:/mosquitto/config/mosquitto.conf"
+docker start "${CONTAINER_NAME}" >/dev/null
 
 for _ in $(seq 1 12); do
   if command -v nc >/dev/null && nc -z "127.0.0.1" "${PORT}" 2>/dev/null; then
