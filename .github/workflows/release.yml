@@ -31,7 +31,7 @@ jobs:
   docker-release:
     uses: automationnexus/.github/.github/workflows/release-docker.yml@v1
     with:
-      runner-labels: '["ubuntu-latest"]'
+      runner-labels: '["linux","x64","k3s","ubuntu-latest"]'
       image-name: automationnexus/modeldeck
       platforms: linux/amd64,linux/arm64
       tag_name: ${{ inputs.tag_name || '' }}
@@ -42,7 +42,7 @@ jobs:
     name: Sync stable add-on pin (in-repo)
     needs: [docker-release]
     if: always() && needs.docker-release.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ["linux", "x64", "k3s", "ubuntu-latest"]
     timeout-minutes: 10
     steps:
       - name: Mint CI-Bot token
