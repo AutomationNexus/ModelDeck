@@ -1,5 +1,5 @@
 name: ModelDeck
-version: "0.0.12"
+version: "0.0.13"
 slug: modeldeck
 description: AI usage and quota bridge for Home Assistant (Codex, Claude, Cursor)
 url: https://github.com/automationnexus/ModelDeck
