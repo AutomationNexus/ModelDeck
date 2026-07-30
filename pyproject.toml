@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "modeldeck"
-version = "0.0.12"
+version = "0.0.13"
 description = "Dockerized AI usage and quota bridge for Home Assistant via MQTT."
 readme = "README.md"
 requires-python = ">=3.11"
