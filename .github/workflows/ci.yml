@@ -17,7 +17,7 @@ jobs:
     uses: automationnexus/.github/.github/workflows/ci.yml@v1
     with:
       branch-model: main-dev
-      runner-labels: '["ubuntu-latest"]'
+      runner-labels: '["linux","x64","k3s","ubuntu-latest"]'
       # This repo also ships the HA add-on folders (modeldeck/, modeldeck-nightly/); their
       # pointer bumps are published to main via a sync/publish-main-* branch (see nightly.yml
       # and release.yml), which needs to be an allowed PR source into main.
